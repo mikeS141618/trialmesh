@@ -1,0 +1,80 @@
+# trialmesh/pyproject.toml
+# For Poetry or modern build
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trialmesh"
+version = "1.0.0"
+description = "A modular clinical trial matching system using LLMs and vector search"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "mikeS141618"}
+]
+keywords = ["clinical-trials", "healthcare", "llm", "vector-search", "oncology"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "vllm==0.8.5",
+    "faiss-cpu==1.11.0",
+    "matplotlib==3.10.1",
+    "pandas==2.2.3",
+    "seaborn==0.13.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.3"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mikeS141618/trialmesh"
+"Bug Tracker" = "https://github.com/mikeS141618/trialmesh/issues"
+"Documentation" = "https://github.com/mikeS141618/trialmesh#readme"
+
+[project.scripts]
+trialmesh-download-sigir2016 = "trialmesh.fetchers.pull_sigir2016:cli_main"
+trialmesh-process-sigir2016 = "trialmesh.fetchers.processxml:cli_main"
+trialmesh-summarize = "trialmesh.llm.summarizers:cli_main"
+trialmesh-clean = "trialmesh.utils.clean_run:cli_main"
+trialmesh-codemd = "trialmesh.utils.codemd:cli_main"
+trialmesh-embed = "trialmesh.embeddings.run_embedding:cli_main"
+trialmesh-index = "trialmesh.embeddings.build_index:cli_main"
+trialmesh-retrieval = "trialmesh.cli.run_retrieval_pipeline:cli_main"
+trialmesh-download-models = "trialmesh.cli.download_models:cli_main"
+trialmesh-evaluate = "trialmesh.evaluation.evaluate_results:cli_main"
+trialmesh-match = "trialmesh.cli.run_matcher:cli_main"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trialmesh"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
