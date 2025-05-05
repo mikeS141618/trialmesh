@@ -297,7 +297,7 @@ class PromptRegistry:
         return {
             "system": "You are a clinical match evaluator with extensive experience in oncology trials. Provide balanced, evidence-based assessments of patient-trial compatibility focused on clinical significance rather than numerical values.",
             "user": """
-    Carefully analyze how well the patient matches the trial requirements, considering diagnosis alignment, biomarkers, prior treatments, and inclusion/exclusion criteria.
+    Carefully analyze how well the patient matches the trial requirements, considering previous filtering results, diagnosis alignment, biomarkers, prior treatments, and inclusion/exclusion criteria.
 
     Patient Profile:
     \"\"\"
@@ -309,31 +309,31 @@ class PromptRegistry:
     {trial_summary}
     \"\"\"
 
-    Evaluate the match and provide your assessment in this EXACT format:
+    PREVIOUS EVALUATION RESULTS:
+    Exclusion Filter: {exclusion_verdict} - {exclusion_reason}
+    Inclusion Filter: {inclusion_verdict} - {inclusion_reasoning}
+    Missing Information: {missing_information}
+    Unmet Criteria: {unmet_criteria}
 
-    SCORE: [0-100]
-    [0-29: Unsuitable - Major disqualifying factors]
-    [30-59: Weak match - Significant concerns or missing requirements]
-    [60-79: Possible match - Generally good fit with minor issues]
-    [80-100: Strong match - Excellent alignment with requirements]
+    CLASSIFICATION GUIDELINES:
+    - STRONG MATCH (Score 8-10): Patient CLEARLY meets ALL inclusion criteria and NO exclusion criteria apply. There is specific evidence for every major requirement. The patient's condition, biomarkers, and treatment history align perfectly with the trial's target population.
 
-    VERDICT: [STRONG MATCH, POSSIBLE MATCH, WEAK MATCH, or UNSUITABLE]
+    - POSSIBLE MATCH (Score 5-7): Patient likely meets most key criteria, but has some uncertainties or missing information that requires verification. Core eligibility is still possible. Patient could benefit from the trial if questions are resolved.
 
-    MATCHING FACTORS:
-    - List 2-3 key factors where the patient clearly meets trial requirements
-    - Focus on the most clinically significant matching elements
+    - UNSUITABLE (Score 0-4): Patient fails to meet one or more critical eligibility requirements OR has multiple uncertainties that make eligibility unlikely. Definitive contraindications may exist or there is insufficient evidence for key inclusion criteria.
 
-    CONCERNS:
-    - List any factors where the patient may not meet requirements
-    - Include potential exclusion criteria that might apply
-    - Mention any critical missing information needed for assessment
+    PROVIDE YOUR ASSESSMENT IN THIS EXACT FORMAT:
 
-    CLINICAL REASONING:
-    Provide a concise clinical explanation of your overall assessment, focusing on:
-    1. Disease alignment (type, stage, histology)
-    2. Biomarker/genetic requirements
-    3. Prior treatment compatibility
-    4. Performance status and organ function eligibility
+    SCORE: [0-10]
+
+    VERDICT: [HIGHLY LIKELY TO REFER / WOULD CONSIDER REFERRAL / WOULD NOT REFER]
+
+    REASONING: [Provide your conclusion emphasizing the factors that determined your verdict. Be specific about why the patient should or should not be referred to this trial]
+    - explain any borderline concerns
+    - Disease alignment (type, stage, histology)
+    - Biomarker/genetic requirements
+    - Prior treatment compatibility
+    - Performance status and organ function eligibility
 
     Base your assessment on clinical significance rather than raw numerical values. Consider the totality of evidence and prioritize factors that would most impact the patient's eligibility and potential benefit.
     """

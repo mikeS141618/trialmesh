@@ -345,11 +345,37 @@ class TrialMatcher:
         """
         logging.info(f"Running exclusion filter on {len(trials)} trials")
 
-        # Prepare batches for processing
-        batches = [trials[i:i + self.batch_size] for i in range(0, len(trials), self.batch_size)]
+        # Pre-filter trials with empty exclusion criteria
+        trials_with_criteria = []
+        auto_passed_trials = []
+
+        for trial_id, trial_data in trials:
+            exclusion_criteria = trial_data.get("metadata", {}).get("exclusion_criteria", "")
+            if not exclusion_criteria.strip():
+                # Auto-pass trials with no exclusion criteria
+                trial_result = {
+                    "trial_id": trial_id,
+                    "trial_data": trial_data,
+                    "exclusion_result": {"verdict": "PASS", "reason": "No exclusion criteria specified"}
+                }
+                auto_passed_trials.append(trial_result)
+            else:
+                trials_with_criteria.append((trial_id, trial_data))
+
+        logging.info(f"Auto-passed {len(auto_passed_trials)} trials with no exclusion criteria")
+
+        # If no trials have exclusion criteria, return early
+        if not trials_with_criteria:
+            if return_excluded:
+                return auto_passed_trials, []
+            return auto_passed_trials
+
+        # Prepare batches for trials that have exclusion criteria
+        batches = [trials_with_criteria[i:i + self.batch_size]
+                   for i in range(0, len(trials_with_criteria), self.batch_size)]
 
         # Process each batch
-        passed_trials = []
+        passed_trials = auto_passed_trials  # Start with auto-passed trials
         excluded_trials = []
 
         for batch in tqdm(batches, desc="Exclusion filtering"):
@@ -361,7 +387,7 @@ class TrialMatcher:
 
                 variables = {
                     "patient_summary": patient_summary,
-                    "exclusion_criteria": exclusion_criteria or "No exclusion criteria specified."
+                    "exclusion_criteria": exclusion_criteria
                 }
 
                 variables_list.append(variables)
@@ -382,13 +408,13 @@ class TrialMatcher:
                 verdict_match = re.search(r"VERDICT:\s*(\w+)", response.text)
                 reason_match = re.search(r"REASON:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
 
-                verdict = verdict_match.group(1) if verdict_match else "PASS"
-                reason = reason_match.group(1).strip() if reason_match else "No reason provided"
+                verdict = verdict_match.group(1) if verdict_match else "UNPARSABLE_VERDICT"
+                reason = reason_match.group(1).strip() if reason_match else "Unparsable reasoning from model output"
 
-                # If exclusion criteria is empty, automatically PASS
-                if not trial_data.get("metadata", {}).get("exclusion_criteria", "").strip():
-                    verdict = "PASS"
-                    reason = "No exclusion criteria specified"
+                # Log unparsable responses for review
+                if verdict == "UNPARSABLE_VERDICT":
+                    logging.warning(f"Could not parse verdict for trial {trial_id} in exclusion filter")
+                    logging.debug(f"Response fragment: {response.text[:200]}...")
 
                 # Create trial result with exclusion data
                 trial_result = {
@@ -430,11 +456,40 @@ class TrialMatcher:
         """
         logging.info(f"Running inclusion filter on {len(trials)} trials")
 
-        # Prepare batches for processing
-        batches = [trials[i:i + self.batch_size] for i in range(0, len(trials), self.batch_size)]
+        # Pre-filter trials with empty inclusion criteria
+        trials_with_criteria = []
+        auto_undetermined_trials = []
+
+        for trial_result in trials:
+            trial_data = trial_result["trial_data"]
+            inclusion_criteria = trial_data.get("metadata", {}).get("inclusion_criteria", "")
+
+            if not inclusion_criteria.strip():
+                # Auto-mark trials with no inclusion criteria as UNDETERMINED
+                trial_result["inclusion_result"] = {
+                    "verdict": "UNDETERMINED",
+                    "missing_information": "N/A",
+                    "unmet_criteria": "N/A",
+                    "reasoning": "No inclusion criteria specified"
+                }
+                auto_undetermined_trials.append(trial_result)
+            else:
+                trials_with_criteria.append(trial_result)
+
+        logging.info(f"Auto-undetermined {len(auto_undetermined_trials)} trials with no inclusion criteria")
+
+        # If no trials have inclusion criteria, return early
+        if not trials_with_criteria:
+            if return_failed:
+                return auto_undetermined_trials, []
+            return auto_undetermined_trials
+
+        # Prepare batches for trials that have inclusion criteria
+        batches = [trials_with_criteria[i:i + self.batch_size]
+                   for i in range(0, len(trials_with_criteria), self.batch_size)]
 
         # Process each batch
-        included_trials = []
+        included_trials = auto_undetermined_trials  # Start with auto-undetermined trials
         failed_trials = []
 
         for batch in tqdm(batches, desc="Inclusion filtering"):
@@ -448,7 +503,7 @@ class TrialMatcher:
 
                 variables = {
                     "patient_summary": patient_summary,
-                    "inclusion_criteria": inclusion_criteria or "No inclusion criteria specified."
+                    "inclusion_criteria": inclusion_criteria
                 }
 
                 variables_list.append(variables)
@@ -471,16 +526,16 @@ class TrialMatcher:
                 unmet_match = re.search(r"UNMET CRITERIA:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
                 reasoning_match = re.search(r"REASONING:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
 
-                verdict = verdict_match.group(1) if verdict_match else "UNDETERMINED"
-                missing = missing_match.group(1).strip() if missing_match else "None"
-                unmet = unmet_match.group(1).strip() if unmet_match else "None"
-                reasoning = reasoning_match.group(1).strip() if reasoning_match else "No reasoning provided"
+                verdict = verdict_match.group(1) if verdict_match else "UNPARSABLE_VERDICT"
+                missing = missing_match.group(1).strip() if missing_match else "Unparsable missing information"
+                unmet = unmet_match.group(1).strip() if unmet_match else "Unparsable unmet criteria"
+                reasoning = reasoning_match.group(
+                    1).strip() if reasoning_match else "Unparsable reasoning from model output"
 
-                # If inclusion criteria is empty, automatically UNDETERMINED
-                trial_data = trial_result["trial_data"]
-                if not trial_data.get("metadata", {}).get("inclusion_criteria", "").strip():
-                    verdict = "UNDETERMINED"
-                    reasoning = "No inclusion criteria specified"
+                # Handle unparsable verdicts
+                if verdict == "UNPARSABLE_VERDICT":
+                    logging.warning(f"Could not parse verdict for trial {trial_result['trial_id']} in exclusion filter")
+                    logging.debug(f"Response fragment: {response.text[:200]}...")
 
                 # Add inclusion result to trial data
                 trial_result["inclusion_result"] = {
@@ -532,9 +587,27 @@ class TrialMatcher:
                 # Format trial text
                 trial_summary = self._format_trial(trial_data)
 
+                # Extract previous filter results
+                exclusion_result = trial_result.get("exclusion_result", {})
+                inclusion_result = trial_result.get("inclusion_result", {})
+
+                exclusion_verdict = exclusion_result.get("verdict", "UNKNOWN")
+                exclusion_reason = exclusion_result.get("reason", "No reason provided")
+
+                inclusion_verdict = inclusion_result.get("verdict", "UNKNOWN")
+                inclusion_reasoning = inclusion_result.get("reasoning", "No reasoning provided")
+                missing_information = inclusion_result.get("missing_information", "None")
+                unmet_criteria = inclusion_result.get("unmet_criteria", "None")
+
                 variables = {
                     "patient_summary": patient_summary,
-                    "trial_summary": trial_summary
+                    "trial_summary": trial_summary,
+                    "exclusion_verdict": exclusion_verdict,
+                    "exclusion_reason": exclusion_reason,
+                    "inclusion_verdict": inclusion_verdict,
+                    "inclusion_reasoning": inclusion_reasoning,
+                    "missing_information": missing_information,
+                    "unmet_criteria": unmet_criteria
                 }
 
                 variables_list.append(variables)
@@ -556,9 +629,18 @@ class TrialMatcher:
                 verdict_match = re.search(r"VERDICT:\s*(.*?)(?=\n|\Z)", response.text)
                 reasoning_match = re.search(r"REASONING:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
 
-                score = score_match.group(1) if score_match else "0"
-                verdict = verdict_match.group(1).strip() if verdict_match else "UNSUITABLE"
-                reasoning = reasoning_match.group(1).strip() if reasoning_match else "No reasoning provided"
+                score = score_match.group(1) if score_match else "UNPARSABLE_SCORE"
+                verdict = verdict_match.group(1).strip() if verdict_match else "UNPARSABLE_VERDICT"
+                reasoning = reasoning_match.group(
+                    1).strip() if reasoning_match else "Unparsable reasoning from model output"
+
+                # Handle unparsable scores/verdicts
+                if score == "UNPARSABLE_SCORE":
+                    logging.warning(f"Trial {trial_result['trial_id']} had unparsable score")
+
+                if verdict == "UNPARSABLE_VERDICT":
+                    reasoning += " (Original verdict was unparsable)"
+                    logging.warning(f"Trial {trial_result['trial_id']} had unparsable verdict")
 
                 # Add scoring result to trial data
                 trial_result["scoring_result"] = {
