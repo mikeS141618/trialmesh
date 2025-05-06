@@ -520,10 +520,11 @@ class TrialMatcher:
                     logging.warning(f"No response for trial {trial_result['trial_id']}, skipping")
                     continue
 
-                # Extract information using regex
+                # Extract information using improved regex
                 verdict_match = re.search(r"VERDICT:\s*(\w+)", response.text)
-                missing_match = re.search(r"MISSING INFORMATION:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
-                unmet_match = re.search(r"UNMET CRITERIA:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
+                missing_match = re.search(r"MISSING INFORMATION:\s*(.*?)(?=\nUNMET CRITERIA:|\nREASONING:|\Z)",
+                                          response.text, re.DOTALL)
+                unmet_match = re.search(r"UNMET CRITERIA:\s*(.*?)(?=\nREASONING:|\Z)", response.text, re.DOTALL)
                 reasoning_match = re.search(r"REASONING:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
 
                 verdict = verdict_match.group(1) if verdict_match else "UNPARSABLE_VERDICT"
@@ -624,9 +625,9 @@ class TrialMatcher:
                     logging.warning(f"No response for trial {trial_result['trial_id']}, skipping")
                     continue
 
-                # Extract information using regex
+                # Extract information using improved regex with better section boundaries
                 score_match = re.search(r"SCORE:\s*(\d+)", response.text)
-                verdict_match = re.search(r"VERDICT:\s*(.*?)(?=\n|\Z)", response.text)
+                verdict_match = re.search(r"VERDICT:\s*(.*?)(?=\nREASONING:|\n\n|\Z)", response.text)
                 reasoning_match = re.search(r"REASONING:\s*(.*?)(?=\n\n|\Z)", response.text, re.DOTALL)
 
                 score = score_match.group(1) if score_match else "UNPARSABLE_SCORE"
