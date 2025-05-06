@@ -27,6 +27,9 @@ class PromptRegistry:
             "patient_condensed_sigir2016": self._patient_condensed_sigir2016(),
             "trial_summary_sigir2016": self._trial_summary_sigir2016(),
             "trial_condensed_sigir2016": self._trial_condensed_sigir2016(),
+            "exclusion_filter_sigir2016": self._exclusion_filter_sigir2016(),
+            "inclusion_filter_sigir2016": self._inclusion_filter_sigir2016(),
+            "final_match_scoring_sigir2016": self._final_match_scoring_sigir2016(),
         }
 
     def get(self, name: str) -> dict:
@@ -390,175 +393,269 @@ class PromptRegistry:
     @staticmethod
     def _patient_summary_sigir2016():
         return {
-            "system": "You are a medical information specialist who excels at extracting structured clinical information from patient cases across all medical specialties. Your summaries are comprehensive, well-organized, and clinically precise.",
+            "system": "You are a clinical assistant specializing in extracting structured information from patient cases across all medical specialties. Provide clear, concise, and medically accurate summaries.",
             "user": """
-    Extract and organize the key medical information from this patient case.
+    Given the following patient medical history, organize the key information into CLEARLY LABELED SECTIONS.
 
-    Patient Record:
+    Patient Text:
     \"\"\"
     {patient_text}
     \"\"\"
 
-    Create a structured summary with these EXACT sections:
+    For each section, include all relevant information from the patient record:
 
     CHIEF COMPLAINT:
-    • Main reason for visit/primary symptoms
-    • Duration, severity, and pattern of symptoms
-    • Associated symptoms or exacerbating factors
+    - Main reason for visit/primary symptoms
+    - Duration and severity
 
     VITAL SIGNS:
-    • All measured vital parameters (temperature, blood pressure, heart rate, respiratory rate, etc.)
-    • Any abnormal findings or trends
-    • Relevant physical measurements
+    - Any measured vitals (temperature, blood pressure, heart rate, respiratory rate, etc.)
 
     KEY FINDINGS:
-    • Important physical examination findings
-    • Significant diagnostic test results (laboratory, imaging, etc.)
-    • Abnormal findings requiring attention
-    • Key clinical observations
+    - Significant physical examination findings
+    - Relevant laboratory or imaging results
 
     MEDICAL HISTORY:
-    • Confirmed diagnoses and conditions
-    • Previous surgeries, procedures, or hospitalizations
-    • Risk factors (smoking status, alcohol use, exposures)
-    • Family history if relevant to current presentation
+    - Existing conditions
+    - Previous surgeries or hospitalizations
+    - Risk factors (smoking, travel history, exposures)
 
     CURRENT MEDICATIONS:
-    • All prescribed medications with dosages when available
-    • Over-the-counter medications and supplements
-    • Recent medication changes
-    • Medication allergies or adverse reactions
+    - Prescribed medications
+    - Over-the-counter medications
 
     DEMOGRAPHICS:
-    • Age, gender, and other relevant demographic information
-    • Occupational factors if clinically relevant
-    • Living situation if mentioned and relevant
+    - Age, gender, and other relevant demographic information
 
-    Use bullet points for clarity. Include ONLY information explicitly stated in the record. If information for a section is not provided, write "Not specified in record." Do not add inferred details not present in the original text.
+    Provide concise, bulleted information without adding details not present in the original text.
     """
         }
 
     @staticmethod
     def _patient_condensed_sigir2016():
         return {
-            "system": "You are a clinical data specialist who creates optimized patient representations for medical trial matching systems. You excel at identifying the most relevant clinical characteristics while standardizing information for semantic matching.",
+            "system": "You are a clinical data specialist creating concise patient summaries for AI-based trial matching systems. Focus on positive patient characteristics.",
             "user": """
-    Create a CONDENSED PATIENT PROFILE (200-300 words) optimized for semantic matching with clinical trials.
+    Generate a CONDENSED SUMMARY (UNDER 300 WORDS) of this patient that contains ONLY information relevant for matching to appropriate clinical trials.
 
     Patient Record:
     \"\"\"
     {patient_text}
     \"\"\"
 
-    TASK: Generate a single coherent paragraph describing this patient's key clinical characteristics for trial matching. This text will be used for embedding-based similarity matching with trial descriptions.
+    Focus EXCLUSIVELY on:
+    1. Primary medical condition(s) with specific subtypes and staging
+    2. Patient characteristics (gender, performance status)
+    3. Relevant clinical findings and diagnostic results
+    4. Prior treatments received and current therapy status
+    5. Significant medical history that affects eligibility for interventions
 
-    FOCUS EXCLUSIVELY ON:
-    1. Primary medical condition(s) with specific diagnoses, severity, and staging
-    2. Key symptomatology and clinical presentation
-    3. Relevant diagnostic findings and test results
-    4. Prior and current treatments
-    5. Patient characteristics relevant to medical interventions
-    6. Significant medical history affecting potential treatments
+    IMPORTANT INSTRUCTIONS:
+    - Focus on POSITIVE attributes that would qualify the patient for trials
+    - DO NOT include specific numeric thresholds - instead use descriptive terms
+      * Instead of "57 years old" use "adult"
+      * Instead of "hemoglobin 9.2 g/dL" use "mild anemia" or "slightly low hemoglobin"
+      * Instead of "creatinine 1.2 mg/dL" use "near-normal kidney function"
+      * Instead of "ECOG 1" use "good performance status"
+    - Include clinical significance rather than raw measurements
 
-    CRITICAL GUIDELINES:
-    • INCLUDE ONLY POSITIVE ATTRIBUTES that would qualify for clinical trials
-    • CONVERT ALL NUMERIC VALUES to descriptive clinical terms:
-      ✓ "adult patient" instead of "57 years old"
-      ✓ "mild anemia" instead of "hemoglobin 9.2 g/dL"
-      ✓ "near-normal kidney function" instead of "creatinine 1.2 mg/dL"
-      ✓ "good functional status" instead of "ECOG 1"
-    • USE PRECISE MEDICAL TERMINOLOGY consistently
-    • WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
-    • FOCUS ON CURRENT AND FACTUAL patient status
-    • DO NOT include exclusion criteria or negative characteristics
-
-    Your profile should enable optimal semantic similarity matching when compared with trial descriptions formatted in the same style.
+    Write as a continuous informative yet concise paragraph optimized for semantic embedding model matching with clinical trial criteria.
     """
         }
 
     @staticmethod
     def _trial_summary_sigir2016():
         return {
-            "system": "You are a clinical research expert specializing in protocol analysis across all medical specialties. You excel at extracting structured eligibility criteria from complex trial descriptions, making them clear and well-organized.",
+            "system": "You are a clinical research coordinator specializing in translating complex trial protocols into structured eligibility criteria for all medical specialties.",
             "user": """
-    Create a structured summary of this clinical trial's key eligibility information.
+    Given the following trial description, organize the key information into CLEARLY LABELED SECTIONS to match potential participants.
 
-    Trial Description:
+    Trial Text:
     \"\"\"
     {trial_text}
     \"\"\"
 
-    Extract and organize the information into these EXACT sections:
+    Summarize the trial's target population and requirements:
 
     TARGET CONDITION:
-    • Primary condition or disease being studied
-    • Specific disease subtypes, variants, or presentations included
-    • Disease stage, severity, or classification requirements
-    • Diagnostic criteria required for confirmation
+    - Primary condition being studied
+    - Disease stage or severity requirements
 
     DEMOGRAPHICS:
-    • Age range requirements (minimum/maximum)
-    • Gender specifications if any
-    • Other demographic requirements (BMI, weight, etc.)
-    • Special population considerations
+    - Age range requirements
+    - Gender specifications
+    - Other demographic criteria
 
     INCLUSION REQUIREMENTS:
-    • Essential symptoms, findings, or characteristics required
-    • Necessary diagnostic test results or thresholds
-    • Required medical history elements
-    • Minimum duration or chronicity requirements
-    • Other key qualifying factors
+    - Key symptoms or diagnostic criteria
+    - Laboratory or test result thresholds
+    - Specific medical history requirements
 
     EXCLUSION CRITERIA:
-    • Disqualifying comorbidities or conditions
-    • Prohibited medications, treatments, or interventions
-    • Contraindicated patient characteristics
-    • Other factors that would exclude patients
+    - Disqualifying comorbidities
+    - Prohibited medications or therapies
+    - Other factors that would exclude patients
 
     INTERVENTION DETAILS:
-    • Type of intervention (medication, procedure, device, etc.)
-    • Dosing, frequency, or implementation specifics
-    • Duration of intervention
-    • Comparator or control group if mentioned
+    - Brief description of the intervention
+    - Dosing, frequency, or administration details if relevant
 
-    Use bullet points to list each criterion clearly. If information for a section is not provided in the description, write "Not specified in protocol." Include only information explicitly stated in the trial description.
+    Use clear, concise bullets focusing on objective criteria. Follow the exact section structure provided.
     """
         }
 
     @staticmethod
     def _trial_condensed_sigir2016():
         return {
-            "system": "You are a clinical trial matching specialist who creates optimized trial representations for medical matching systems. You excel at identifying the most important eligibility factors while standardizing information for semantic retrieval.",
+            "system": "You are a clinical trial eligibility specialist. Focus exclusively on the positive eligibility characteristics.",
             "user": """
-    Create a CONDENSED TRIAL PROFILE (200-300 words) optimized for semantic matching with patients.
+    Generate a CONDENSED SUMMARY (UNDER 300 WORDS) of this clinical trial that focuses ONLY on what makes an ideal candidate match.
 
     Trial Description:
     \"\"\"
     {trial_text}
     \"\"\"
 
-    TASK: Generate a single coherent paragraph describing the ideal candidate for this clinical trial. This text will be used for embedding-based similarity matching with patient records.
+    Focus EXCLUSIVELY on:
+    1. Target medical condition(s) with specific subtypes and staging
+    2. Required patient characteristics (gender, performance status)
+    3. Essential inclusion criteria that most participants must meet
+    4. Prior treatments that are required or preferred
+    5. Any unique eligibility factors specific to this trial
 
-    FOCUS EXCLUSIVELY ON:
-    1. Target medical condition(s) with specific subtypes, severity, and staging
-    2. Essential patient characteristics sought for enrollment
-    3. Key qualifying clinical features or findings
-    4. Prior treatment requirements or preferences
-    5. Important physiological or functional parameters
-    6. Unique eligibility factors specific to this trial
+    IMPORTANT INSTRUCTIONS:
+    - DO NOT mention any exclusion criteria or negative characteristics
+    - DO NOT include specific numeric thresholds - instead use descriptive terms
+      * Instead of "age > 18" use "adults"
+      * Instead of "hemoglobin > 9 g/dL" use "adequate hemoglobin levels"
+      * Instead of "creatinine < 1.5 mg/dL" use "normal kidney function"
+      * Instead of "ECOG 0-2" use "good performance status"
+    - Focus only on the positive attributes of ideal candidates
 
-    CRITICAL GUIDELINES:
-    • INCLUDE ONLY POSITIVE ATTRIBUTES that define eligible patients
-    • CONVERT ALL NUMERIC THRESHOLDS to descriptive clinical terms:
-      ✓ "adult patients" instead of "age > 18"
-      ✓ "adequate hemoglobin levels" instead of "hemoglobin > 9 g/dL"
-      ✓ "normal kidney function" instead of "creatinine < 1.5 mg/dL"
-      ✓ "good functional status" instead of "ECOG 0-2"
-    • DO NOT MENTION ANY EXCLUSION CRITERIA or negative characteristics
-    • USE PRECISE MEDICAL TERMINOLOGY consistently
-    • WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
-    • Emphasize the most distinctive qualifying factors for this specific trial
+    Write as a continuous informative yet concise paragraph optimized for semantic embedding model matching with patient records.
+    """
+        }
 
-    Your profile should enable optimal semantic similarity matching when compared with patient records formatted in the same style.
+    @staticmethod
+    def _exclusion_filter_sigir2016():
+        return {
+            "system": "You are a medical research coordinator evaluating patient eligibility for clinical trials. You understand that clinical trials often present valuable treatment options, and you aim to give patients the benefit of the doubt whenever reasonable.",
+            "user": """
+    Evaluate whether this patient should be EXCLUDED from the clinical trial based on the trial's exclusion criteria.
+
+    Trial Exclusion Criteria:
+    \"\"\"
+    {exclusion_criteria}
+    \"\"\"
+
+    Patient Summary:
+    \"\"\"
+    {patient_summary}
+    \"\"\"
+
+    INSTRUCTIONS:
+    1. Review each exclusion criterion carefully
+    2. Compare against the patient's information
+    3. Only mark as EXCLUDE if there is strong, clear evidence the patient meets an exclusion criterion
+    4. Give the patient the benefit of the doubt when information is missing or ambiguous
+    5. Consider that many exclusion criteria have exceptions or can be waived in appropriate cases
+
+    Return your analysis in this EXACT format:
+
+    VERDICT: [EXCLUDE or PASS]
+
+    REASON:
+    [If EXCLUDE, explain specifically which exclusion criterion the patient meets and why]
+    [If PASS, explain "Patient does not meet any exclusion criteria" or "Insufficient evidence to confirm any exclusion criteria"]
+    """
+        }
+
+    @staticmethod
+    def _inclusion_filter_sigir2016():
+        return {
+            "system": "You are a medical research coordinator evaluating patient eligibility for clinical trials. You understand that clinical trials often present valuable treatment options, and you aim to give patients the benefit of the doubt whenever reasonable.",
+            "user": """
+    Evaluate whether this patient meets the inclusion criteria for the clinical trial.
+
+    Trial Inclusion Criteria:
+    \"\"\"
+    {inclusion_criteria}
+    \"\"\"
+
+    Patient Summary:
+    \"\"\"
+    {patient_summary}
+    \"\"\"
+
+    INSTRUCTIONS:
+    1. Review each inclusion criterion carefully
+    2. Compare against the patient's information
+    3. Only mark as FAIL if there is strong, clear evidence that a criterion is not met
+    4. Give the patient the benefit of the doubt when information is missing or ambiguous
+    5. Consider that many inclusion criteria have flexibility or can be interpreted favorably when appropriate
+
+    Return your analysis in this EXACT format:
+
+    VERDICT: [INCLUDE, UNDETERMINED, or FAIL]
+    - INCLUDE: All inclusion criteria appear to be met based on available information
+    - UNDETERMINED: Cannot determine eligibility due to missing key information
+    - FAIL: One or more inclusion criteria are clearly not met
+
+    MISSING INFORMATION:
+    [If UNDETERMINED, list specific information needed to make a determination]
+    [If INCLUDE or FAIL, write "None"]
+
+    UNMET CRITERIA:
+    [If FAIL, list which specific inclusion criteria are not met]
+    [If INCLUDE or UNDETERMINED, write "None" or list potential minor concerns]
+
+    REASONING:
+    [Brief explanation of your decision, highlighting key factors]
+    """
+        }
+
+    @staticmethod
+    def _final_match_scoring_sigir2016():
+        return {
+            "system": "You are a medical research coordinator evaluating patient-trial matches. You understand the importance of connecting patients with appropriate clinical trials, and you aim to identify all reasonable opportunities for patient participation.",
+            "user": """
+    Evaluate how well this patient matches this clinical trial, considering all available information.
+
+    Patient Profile:
+    \"\"\"
+    {patient_summary}
+    \"\"\"
+
+    Trial Description:
+    \"\"\"
+    {trial_summary}
+    \"\"\"
+
+    PREVIOUS EVALUATION RESULTS:
+    Exclusion Filter: {exclusion_verdict} - {exclusion_reason}
+    Inclusion Filter: {inclusion_verdict} - {inclusion_reasoning}
+    Missing Information: {missing_information}
+    Unmet Criteria: {unmet_criteria}
+
+    CLASSIFICATION GUIDELINES:
+    - STRONG MATCH (Score 7-10): Patient meets all major eligibility criteria and would likely benefit from this trial. Any minor questions or issues could reasonably be addressed or waived.
+
+    - POSSIBLE MATCH (Score 4-6): Patient meets some key criteria but has uncertainties or missing information that need verification. The patient could be eligible if these questions are resolved favorably.
+
+    - UNSUITABLE (Score 0-3): Patient clearly fails to meet multiple critical eligibility requirements or has a condition that would make trial participation inappropriate or unsafe.
+
+    PROVIDE YOUR ASSESSMENT IN THIS EXACT FORMAT:
+
+    SCORE: [0-10]
+
+    VERDICT: [HIGHLY LIKELY TO REFER / WOULD CONSIDER REFERRAL / WOULD NOT REFER]
+
+    REASONING: [Provide your conclusion emphasizing why the patient should or should not be referred to this trial]
+    - Medical condition alignment with trial focus
+    - Key eligibility criteria met or not met
+    - Potential benefits for this specific patient
+    - Any important concerns or uncertainties
+
+    Remember that clinical trials often provide valuable options for patients, especially when standard treatments have limitations. When in doubt about borderline cases, consider the potential value to the patient.
     """
         }
