@@ -394,7 +394,7 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="exclusion_filter",
+                prompt_name="exclusion_filter_sigir2016",
                 variables_list=variables_list
             )
 
@@ -510,7 +510,7 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="inclusion_filter",
+                prompt_name="inclusion_filter_sigir2016",
                 variables_list=variables_list
             )
 
@@ -615,7 +615,7 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="final_match_scoring",
+                prompt_name="final_match_scoring_sigir2016",
                 variables_list=variables_list
             )
 
