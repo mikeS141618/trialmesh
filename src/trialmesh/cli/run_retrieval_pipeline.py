@@ -106,7 +106,6 @@ def parse_args():
         # Try common locations
         potential_dirs = [
             os.path.expanduser("~/models"),
-            os.path.expanduser("~/deepNets/models"),
             "/models",
             "/data/models"
         ]

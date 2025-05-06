@@ -158,7 +158,7 @@ The pipeline concludes with performance evaluation:
   clear &&
   trialmesh-clean --clean-all --force &&
   trialmesh-summarize --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data --dataset sigir2016/processed_cut --output-dir ./data/sigir2016/summaries --cache-dir ./cache/llm_responses --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=33 --condensed-trial-only &&
-  trialmesh-embed --model-path /home/mikenet/deepNets/models/bge-large-en-v1.5 --batch-size 256 --normalize --data-dir ./data --dataset sigir2016/summaries &&
+  trialmesh-embed --model-path ../../models/bge-large-en-v1.5 --batch-size 256 --normalize --data-dir ./data --dataset sigir2016/summaries &&
   trialmesh-index build --embeddings ./data/sigir2016/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy --output ./data/sigir2016/indices/bge-large-en-v1.5_trials_hnsw.index --index-type hnsw --m 96 --ef-construction 256 &&
   trialmesh-index search --index ./data/sigir2016/indices/bge-large-en-v1.5_trials_hnsw.index --queries ./data/sigir2016/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./data/sigir2016/results/bge-large-en-v1.5_hnsw_search_results.json --k 33 &&
   trialmesh-evaluate &&
