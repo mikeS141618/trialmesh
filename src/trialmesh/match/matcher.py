@@ -26,6 +26,16 @@ class TrialMatcher:
 
     Each stage leverages LLMs to apply clinical judgment similar to how
     trial coordinators would evaluate potential candidates.
+
+    Attributes:
+        patient_summaries_path (str): Path to patient summaries file
+        trials_path (str): Path to trial corpus file
+        batch_size (int): Batch size for processing
+        llm (LlamaRunner): LlamaRunner instance for generating text
+        prompt_registry (PromptRegistry): Registry with available prompts
+        prompt_runner (PromptRunner): Interface for running prompts
+        patients (dict): Dictionary of loaded patient data
+        trials (dict): Dictionary of loaded trial data
     """
 
     def __init__(
@@ -142,7 +152,32 @@ class TrialMatcher:
               skip_inclusion: bool = False,
               skip_scoring: bool = False,
               include_all_trials: bool = False) -> List[Dict[str, Any]]:
-        """Run the matching pipeline."""
+        """Run the complete matching pipeline.
+
+        This method processes the search results through the multi-stage
+        filtering pipeline to generate detailed trial matching assessments
+        for each patient.
+
+        Args:
+            search_results: List of search result dictionaries from vector retrieval
+            exclusion_prompt: Name of the prompt for exclusion filtering
+            inclusion_prompt: Name of the prompt for inclusion filtering
+            scoring_prompt: Name of the prompt for final scoring
+            exclusion_max_tokens: Maximum tokens for exclusion prompt responses
+            inclusion_max_tokens: Maximum tokens for inclusion prompt responses
+            scoring_max_tokens: Maximum tokens for scoring prompt responses
+            exclusion_temperature: Temperature for exclusion LLM generation
+            inclusion_temperature: Temperature for inclusion LLM generation
+            scoring_temperature: Temperature for scoring LLM generation
+            top_k: Maximum number of trials to evaluate per patient
+            skip_exclusion: Whether to skip the exclusion filtering stage
+            skip_inclusion: Whether to skip the inclusion filtering stage
+            skip_scoring: Whether to skip the detailed scoring stage
+            include_all_trials: Whether to include all trials in output regardless of filtering status
+
+        Returns:
+            List of patient match results with detailed trial evaluations
+        """
         logging.info("Starting trial matching process")
         logging.info(f"Using exclusion prompt: {exclusion_prompt}")
         logging.info(f"Using inclusion prompt: {inclusion_prompt}")
@@ -318,14 +353,24 @@ class TrialMatcher:
                                 return_excluded: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Apply exclusion filter to trials.
 
+        This method evaluates whether a patient should be excluded from trials
+        based on exclusion criteria. It uses an LLM to analyze the patient summary
+        against each trial's exclusion criteria to identify clear mismatches.
+
+        The method automatically passes trials without exclusion criteria and
+        processes the remaining trials in batches for efficiency.
+
         Args:
             patient_summary: Patient summary text
             trials: List of (trial_id, trial_data) tuples
             prompt_name: Name of the prompt to use for exclusion filtering
+            max_tokens: Maximum tokens to generate in response
+            temperature: Temperature for generation
             return_excluded: Whether to return excluded trials
 
         Returns:
-            Tuple of (passed_trials, excluded_trials), where excluded_trials is empty if return_excluded is False
+            Tuple of (passed_trials, excluded_trials), where excluded_trials
+            is empty if return_excluded is False
         """
         logging.info(f"Running exclusion filter on {len(trials)} trials with prompt {prompt_name}")
 
@@ -431,11 +476,24 @@ class TrialMatcher:
                                 return_failed: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Apply inclusion filter to trials that passed exclusion.
 
+        This method evaluates whether a patient meets the inclusion criteria
+        for each trial. It uses an LLM to analyze the patient summary against
+        each trial's inclusion criteria to determine eligibility.
+
+        The method identifies missing information and unmet criteria,
+        providing detailed reasoning for each decision.
+
         Args:
             patient_summary: Patient summary text
             trials: List of dictionaries with trial data and exclusion results
             prompt_name: Name of the prompt to use for inclusion filtering
+            max_tokens: Maximum tokens to generate in response
+            temperature: Temperature for generation
             return_failed: Whether to return trials that failed inclusion
+
+        Returns:
+            Tuple of (included_trials, failed_trials), where failed_trials
+            is empty if return_failed is False
         """
         logging.info(f"Running inclusion filter on {len(trials)} trials with prompt {prompt_name}")
 
@@ -554,10 +612,24 @@ class TrialMatcher:
                        prompt_name: str = "final_match_scoring_sigir2016") -> List[Dict[str, Any]]:
         """Apply final scoring to trials that passed inclusion filter.
 
+        This method performs detailed clinical evaluation of each trial
+        for the given patient, considering:
+        1. Results from previous filtering stages
+        2. Detailed trial information
+        3. Patient characteristics
+
+        It assigns a score (typically 1-10) and detailed verdict with
+        clinical reasoning explaining the match quality.
+
         Args:
             patient_summary: Patient summary text
-            trials: List of dictionaries with trial data, exclusion and inclusion results
+            trials: List of dictionaries with trial data and previous filter results
+            max_tokens: Maximum tokens to generate in response
+            temperature: Temperature for generation
             prompt_name: Name of the prompt to use for final scoring
+
+        Returns:
+            List of trial dictionaries with added scoring results
         """
         logging.info(f"Running final scoring on {len(trials)} trials with prompt {prompt_name}")
 

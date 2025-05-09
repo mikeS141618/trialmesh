@@ -25,16 +25,17 @@ class BaseEmbeddingModel(ABC):
     across multiple GPUs for efficient embedding generation at scale.
 
     Attributes:
-        model_path: Path to the embedding model
-        max_length: Maximum sequence length for tokenization
-        batch_size: Batch size for processing
-        normalize_embeddings: Whether to L2 normalize embeddings
-        device: Device to run the model on
+        model_path (str): Path to the embedding model
+        max_length (int): Maximum sequence length for tokenization
+        batch_size (int): Batch size for processing
+        normalize_embeddings (bool): Whether to L2 normalize embeddings
+        device (str): Device to run the model on
         model: The actual model instance (initialized in prepare_model)
         tokenizer: The tokenizer for the model
-        is_distributed: Whether running in distributed mode
-        local_rank: Current process rank in distributed setting
-        world_size: Total number of processes in distributed setting
+        is_distributed (bool): Whether running in distributed mode
+        local_rank (int): Current process rank in distributed setting
+        world_size (int): Total number of processes in distributed setting
+        use_multi_gpu (bool): Whether to use distributed processing
     """
 
     def __init__(self, model_path: str, max_length: int = 512,
@@ -50,7 +51,9 @@ class BaseEmbeddingModel(ABC):
             device: Device to run the model on (cuda:0, cuda:1, cpu)
             use_multi_gpu: Whether to use distributed processing across GPUs
             normalize_embeddings: Whether to L2 normalize embeddings (recommended for cosine similarity)
+            local_rank: Current process rank in distributed setting (-1 if not distributed)
         """
+
 
         self.model_path = model_path
         self.max_length = max_length

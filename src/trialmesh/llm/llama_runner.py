@@ -16,11 +16,11 @@ class LlamaResponse(NamedTuple):
     about token usage and the original prompts that generated the response.
 
     Attributes:
-        text: The generated text response from the model
-        input_tokens: Number of tokens in the input prompt
-        output_tokens: Number of tokens in the generated response
-        user_prompt: The user prompt that generated this response
-        system_prompt: The system prompt used (if any)
+        text (str): The generated text response from the model
+        input_tokens (int): Number of tokens in the input prompt
+        output_tokens (int): Number of tokens in the generated response
+        user_prompt (str): The user prompt that generated this response
+        system_prompt (Optional[str]): The system prompt used (if any)
     """
     text: str
     input_tokens: int
@@ -104,6 +104,9 @@ class LlamaRunner:
     def _get_cache_key(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generate a deterministic hash key for caching based on prompt input.
 
+        This method creates a unique identifier for caching LLM responses
+        based on the content of the prompt and system prompt.
+
         Args:
             prompt: User prompt text
             system_prompt: Optional system prompt text
@@ -169,7 +172,7 @@ class LlamaRunner:
         logging.debug(f"Cached response for key: {cache_key}")
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None,
-                 max_tokens: Optional[int] = None, temperature: Optional[float] = None) -> LlamaResponse:
+                max_tokens: Optional[int] = None, temperature: Optional[float] = None) -> LlamaResponse:
         """Generate text from a prompt with optional system prompt.
 
         This method handles the core generation functionality, including:

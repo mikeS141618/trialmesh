@@ -74,7 +74,18 @@ def parse_args():
 
 
 def main():
-    """Generate embeddings for trials and patients."""
+    """Generate embeddings for trials and patients.
+
+    This function orchestrates the embedding generation process:
+    1. Initializes the embedding model based on command line arguments
+    2. Generates embeddings for trial documents
+    3. Generates embeddings for patient queries
+    4. Saves the embeddings to disk for later use in the pipeline
+
+    When running in multi-GPU mode, the function distributes work across
+    available GPUs for faster processing of large datasets.
+    """
+
     args = parse_args()
     setup_logging(args.log_level)
 

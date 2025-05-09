@@ -17,14 +17,15 @@ class FaissIndexBuilder:
     distance metrics.
 
     Attributes:
-        index_type: Type of index ("flat", "ivf", "hnsw")
-        dimension: Embedding dimension
-        metric: Distance metric ("cosine", "l2", "ip")
-        nlist: Number of centroids for IVF indices
-        m: Number of connections per layer for HNSW indices
-        ef_construction: Size of dynamic candidate list for HNSW
+        index_type (str): Type of index ("flat", "ivf", "hnsw")
+        dimension (int): Embedding dimension
+        metric (str): Distance metric ("cosine", "l2", "ip")
+        nlist (int): Number of centroids for IVF indices
+        m (int): Number of connections per layer for HNSW indices
+        ef_construction (int): Size of dynamic candidate list for HNSW
         index: The FAISS index object
-        id_map: Mapping between internal FAISS IDs and document IDs
+        id_map (dict): Mapping between internal FAISS IDs and document IDs
+        requires_training (bool): Whether the index requires training (set for IVF indices)
     """
 
     def __init__(
@@ -125,9 +126,10 @@ class FaissIndexBuilder:
         Args:
             embeddings: Dictionary mapping document IDs to embedding vectors
             normalize: Whether to normalize vectors (for cosine similarity)
+                       If None, defaults to True for cosine metric, False otherwise
 
         Raises:
-            ValueError: If embeddings dictionary is empty
+            ValueError: If embeddings dictionary is empty or contains invalid data
         """
         if not embeddings:
             raise ValueError("Empty embeddings dictionary provided")

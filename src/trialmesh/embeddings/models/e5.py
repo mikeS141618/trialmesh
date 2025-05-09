@@ -8,7 +8,17 @@ from trialmesh.embeddings.base import BaseEmbeddingModel
 
 
 class E5LargeV2(BaseEmbeddingModel):
-    """Embedding model using intfloat/e5-large-v2."""
+    """Embedding model using intfloat/e5-large-v2.
+
+    This class implements the E5 embedding model which is optimized for
+    semantic search and retrieval tasks. It uses mean pooling of the
+    last hidden state as the document embedding.
+
+    Note: E5 requires "passage: " prefix for document encoding.
+
+    Attributes:
+        Inherits all attributes from BaseEmbeddingModel
+    """
 
     def _load_model(self):
         """Load E5 model and tokenizer."""
@@ -21,7 +31,21 @@ class E5LargeV2(BaseEmbeddingModel):
             raise
 
     def _batch_encode(self, texts: List[str]) -> torch.Tensor:
-        """Encode a batch of texts using E5 model."""
+        """Encode a batch of texts using E5 model.
+
+        This method converts text inputs to embedding vectors using:
+        1. Adding the required "passage: " prefix to each text
+        2. Tokenization with padding and truncation
+        3. Forward pass through the E5 model
+        4. Mean pooling of token embeddings weighted by attention mask
+        5. Optional L2 normalization of embeddings
+
+        Args:
+            texts: List of texts to encode
+
+        Returns:
+            Tensor of embeddings, one per input text
+        """
         # E5 requires "query: " or "passage: " prefix
         # Use "passage: " for document encoding
         prefixed_texts = [f"passage: {text}" for text in texts]

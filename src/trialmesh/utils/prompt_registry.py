@@ -9,8 +9,11 @@ class PromptRegistry:
     """Registry that loads prompts from individual text files.
 
     This class dynamically loads prompts from text files in a specified directory,
-    supporting the "==== SYSTEM PROMPT ====" and "==== USER PROMPT ====" format
-    produced by extract_prompts.py.
+    supporting the "==== SYSTEM PROMPT ====" and "==== USER PROMPT ====" format.
+
+    Attributes:
+        prompt_dir (Path): Path to directory containing prompt text files
+        prompts (dict): Dictionary of loaded prompts
     """
 
     def __init__(self, prompt_dir: str = "./prompts"):
@@ -45,11 +48,19 @@ class PromptRegistry:
     def _parse_prompt_file(self, file_path: Path) -> Tuple[str, str]:
         """Parse a prompt file into system and user prompts.
 
+        This method reads a prompt file and separates it into system and
+        user prompt components based on section markers or fallback rules.
+
+        The file format supports multiple layouts:
+        1. Files with both system and user sections marked
+        2. Files with only user section marked
+        3. Files with no section markers (treated as user prompt)
+
         Args:
             file_path: Path to the prompt file
 
         Returns:
-            Tuple of (system_prompt, user_prompt)
+            Tuple of (system_prompt, user_prompt) with empty strings for missing parts
         """
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -93,6 +104,7 @@ class PromptRegistry:
 
         Returns:
             Dictionary containing 'system' and 'user' prompt templates
+            Empty strings for missing components
         """
         prompt = self.prompts.get(name)
         if not prompt:
@@ -111,8 +123,13 @@ class PromptRegistry:
     def list_available_prompts(self) -> List[str]:
         """List all available prompt names.
 
+        This method returns a comprehensive list of all prompt names available
+        in the registry, combining both:
+        1. Previously loaded prompts
+        2. Prompt files that exist in the directory but haven't been loaded yet
+
         Returns:
-            List of prompt names available in the registry
+            Sorted list of prompt names available in the registry
         """
         # Combine loaded prompts and files in the directory
         available_prompts = set(self.prompts.keys())

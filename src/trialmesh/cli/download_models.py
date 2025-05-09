@@ -215,10 +215,16 @@ def download_models(args):
     """Download selected models based on arguments.
 
     This function handles the downloading of multiple models, with options for
-    parallel downloads and progress reporting.
+    parallel downloads and progress reporting. It manages the entire download
+    process including:
+    1. Finding models to download based on user selection
+    2. Creating appropriate directories
+    3. Downloading models (potentially in parallel)
+    4. Summarizing successes and failures
 
     Args:
-        args: Command-line arguments namespace
+        args: Command-line arguments namespace containing model selection options,
+              output directory, workers count, and other download parameters
     """
     # Handle --list flag first
     if args.list:
@@ -333,6 +339,9 @@ def download_models(args):
 
 def check_huggingface_cli():
     """Check if huggingface-cli is available.
+
+    This function verifies that the huggingface-cli tool is installed and
+    functioning, which is required for model downloads.
 
     Returns:
         True if huggingface-cli is installed and working, False otherwise

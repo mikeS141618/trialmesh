@@ -132,13 +132,16 @@ def run_embedding(model_name: str, model_path: str, data_dir: str, run_dir: str,
     """Run embedding generation for a single model.
 
     This function executes the embedding generation process for a specific model,
-    creating vectors for both trials and patients.
+    creating vectors for both trials and patients. It handles:
+    1. Configuring the embedding model
+    2. Processing all documents and queries
+    3. Saving the generated embeddings to disk
 
     Args:
         model_name: Name of the embedding model
         model_path: Path to the model
         data_dir: Base data directory
-        run_dir: experiment directory
+        run_dir: Experiment directory for outputs
         dataset: Dataset to process
         batch_size: Batch size for processing
 
@@ -194,11 +197,12 @@ def build_index(model_name: str, run_dir: str, dataset: str,
     """Build FAISS index for a model.
 
     This function creates a FAISS index from pre-generated embeddings,
-    configuring it with the specified parameters.
+    configuring it with the specified parameters. It supports different
+    index types with appropriate parameter tuning.
 
     Args:
         model_name: Name of the embedding model
-        run_dir: experiment directory
+        run_dir: Experiment directory
         dataset: Dataset to process
         index_type: Type of FAISS index to build (flat, hnsw)
         m_value: Number of connections per layer for HNSW index
@@ -264,11 +268,12 @@ def run_search(model_name: str, run_dir: str, dataset: str,
     """Run vector search for a model.
 
     This function performs similarity search using a pre-built FAISS index,
-    finding the most relevant trials for each patient.
+    finding the most relevant trials for each patient. It configures search
+    parameters based on index type and saves results to a JSON file.
 
     Args:
         model_name: Name of the embedding model
-        run_dir: experiment directory
+        run_dir: Experiment directory
         dataset: Dataset to process
         index_type: Type of FAISS index to use (flat, hnsw)
         k_value: Number of results to return per query
@@ -330,10 +335,13 @@ def run_pipeline(args):
     2. Build indices
     3. Run searches
 
-    It tracks successes and failures and provides a summary report.
+    It tracks successes and failures for each model and provides a detailed
+    summary report upon completion. Each stage can be optionally skipped
+    based on command-line arguments.
 
     Args:
-        args: Command-line arguments namespace
+        args: Command-line arguments namespace containing configuration
+              for models, datasets, and processing options
     """
     successful_models = []
     failed_models = []
