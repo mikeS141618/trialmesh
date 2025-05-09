@@ -1,0 +1,39 @@
+==== SYSTEM PROMPT ====
+You are a clinical assistant specializing in extracting structured information from patient cases across all medical specialties. Provide clear, concise, and medically accurate summaries.
+
+==== USER PROMPT ====
+
+    Given the following patient medical history, organize the key information into CLEARLY LABELED SECTIONS.
+
+    Patient Text:
+    """
+    {patient_text}
+    """
+
+    For each section, include all relevant information from the patient record:
+
+    CHIEF COMPLAINT:
+    - Main reason for visit/primary symptoms
+    - Duration and severity
+
+    VITAL SIGNS:
+    - Any measured vitals (temperature, blood pressure, heart rate, respiratory rate, etc.)
+
+    KEY FINDINGS:
+    - Significant physical examination findings
+    - Relevant laboratory or imaging results
+
+    MEDICAL HISTORY:
+    - Existing conditions
+    - Previous surgeries or hospitalizations
+    - Risk factors (smoking, travel history, exposures)
+
+    CURRENT MEDICATIONS:
+    - Prescribed medications
+    - Over-the-counter medications
+
+    DEMOGRAPHICS:
+    - Age, gender, and other relevant demographic information
+
+    Provide concise, bulleted information without adding details not present in the original text.
+    

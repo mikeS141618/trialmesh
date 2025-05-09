@@ -1,10 +1,9 @@
 # src/trialmesh/llm/prompt_runner.py
-
 import logging
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional
 
-from trialmesh.utils.prompt_registry import PromptRegistry
 from trialmesh.llm.llama_runner import LlamaRunner, LlamaResponse
+from trialmesh.utils.prompt_registry import PromptRegistry
 
 
 class PromptRunner:
@@ -12,11 +11,6 @@ class PromptRunner:
 
     This class connects the LlamaRunner with the PromptRegistry, providing
     a simplified interface for formatting and running prompts with variables.
-    It handles the details of template substitution and LLM execution.
-
-    Attributes:
-        llm: LlamaRunner instance for generating text
-        prompts: PromptRegistry containing available prompt templates
     """
 
     def __init__(
@@ -24,6 +18,12 @@ class PromptRunner:
             llama_runner: LlamaRunner,
             prompt_registry: Optional[PromptRegistry] = None,
     ):
+        """Initialize with LlamaRunner and PromptRegistry.
+
+        Args:
+            llama_runner: LlamaRunner instance for generating text
+            prompt_registry: PromptRegistry with available prompt templates
+        """
         self.llm = llama_runner
         self.prompts = prompt_registry or PromptRegistry()
 
@@ -33,15 +33,10 @@ class PromptRunner:
                    temperature: Optional[float] = None) -> LlamaResponse:
         """Run a prompt from the registry with the given variables.
 
-        This method:
-        1. Retrieves the prompt template from the registry
-        2. Formats the template with provided variables
-        3. Runs the LLM with the formatted prompt
-
         Args:
             prompt_name: Name of the prompt template in the registry
             variables: Dictionary of variables to format into the template
-            override_system_prompt: Optional system prompt to use instead of the template's
+            override_system_prompt: Optional system prompt to use instead
             max_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature
 
@@ -79,21 +74,15 @@ class PromptRunner:
                          temperature: Optional[float] = None) -> List[Optional[LlamaResponse]]:
         """Run a prompt from the registry with multiple sets of variables.
 
-        This method efficiently processes multiple prompts with the same template
-        by batching the requests to the LLM.
-
         Args:
             prompt_name: Name of the prompt template in the registry
-            variables_list: List of variable dictionaries to format into the template
-            override_system_prompt: Optional system prompt to use instead of the template's
+            variables_list: List of variable dictionaries to format
+            override_system_prompt: Optional system prompt to use instead
             max_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature
 
         Returns:
             List of LlamaResponse objects, one for each set of variables
-
-        Raises:
-            ValueError: If prompt_name is not found
         """
         prompt_pair = self.prompts.get(prompt_name)
         if not prompt_pair or not prompt_pair.get("user"):

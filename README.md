@@ -18,6 +18,7 @@ TrialMesh addresses the challenge of matching patients to appropriate clinical t
 - **Distributed Processing:** Multi-GPU support for accelerated embedding generation and LLM inference.
 - **Advanced Similarity Search:** FAISS indices for efficient retrieval with flat, IVF, and HNSW index types.
 - **Comprehensive Evaluation:** Tools for evaluating retrieval performance against gold standard data.
+- **Configurable Prompts:** File-based prompt system for easy customization without code changes.
 
 ## Documentation
 
@@ -37,6 +38,26 @@ pip install -e .
 
 # Or with development dependencies
 pip install -e ".[dev]"
+```
+
+## Prompt System
+
+TrialMesh uses a file-based prompt system that allows for easy customization and experimentation. Prompts are stored in individual text files in the `./prompts` directory with the following format:
+
+```
+==== SYSTEM PROMPT ====
+[System prompt content goes here]
+
+==== USER PROMPT ====
+[User prompt content goes here]
+```
+
+To list available prompts:
+
+```bash
+trialmesh-summarize --prompt-dir ./prompts --list-prompts
+# or
+trialmesh-match --prompt-dir ./prompts --list-prompts
 ```
 
 ## Command-Line Tools
@@ -62,12 +83,30 @@ trialmesh-download-models --list        # List available models
 ### LLM Summarization
 
 ```bash
-# Generate LLM summaries for patients and trials
-trialmesh-summarize --model-path /path/to/llama-model \
+# Generate LLM summaries for patients and trials with specific prompt configurations
+trialmesh-summarize \
+  --model-path /path/to/llama-model \
   --data-dir ./data \
   --dataset processed \
   --output-dir ./run/summaries \
-  --cache-dir ./cache/llm_responses
+  --cache-dir ./cache/llm_responses \
+  --prompt-dir ./prompts \
+  --patient-prompts \
+      patient_summary_sigir2016:8000 \
+      patient_condensed_sigir2016:512 \
+  --trial-prompts \
+      trial_summary_sigir2016:8000 \
+      trial_condensed_sigir2016:512
+
+# You can specify multiple prompts with different token limits and temperatures
+# Format: prompt_name:max_tokens[:temperature]
+trialmesh-summarize \
+  --model-path /path/to/llama-model \
+  --prompt-dir ./prompts \
+  --patient-prompts \
+      patient_summary_sigir2016:8000 \
+      patient_condensed_sigir2016:512:0.2 \
+      patient_pathway_sigir2016:6000
 ```
 
 ### Embedding Generation
@@ -142,11 +181,23 @@ trialmesh-evaluate --index-type hnsw --output-file evaluation_results.csv --run-
 
 ```bash
 # Run detailed matching analysis with LLM reasoning
-trialmesh-match --model-path /path/to/llama-model \
+trialmesh-match \
+  --model-path /path/to/llama-model \
   --data-dir ./data \
   --run-dir ./run \
   --search-results results/bge-large-en-v1.5_hnsw_search_results.json \
   --tensor-parallel-size 4
+
+# Use custom prompts with specific token limits
+trialmesh-match \
+  --model-path /path/to/llama-model \
+  --run-dir ./run \
+  --search-results results/bge-large-en-v1.5_flat_search_results.json \
+  --prompt-dir ./prompts \
+  --exclusion-prompt exclusion_filter_sigir2016:2048 \
+  --inclusion-prompt inclusion_filter_sigir2016:2048 \
+  --scoring-prompt final_match_scoring_sigir2016:4096:0.1 \
+  --include-all-trials
 ```
 
 ## Complete End-to-End Pipeline
@@ -155,13 +206,52 @@ TrialMesh provides a complete pipeline for clinical trial matching. The followin
 
 ```bash
 {
-  clear && rm -rv run/ &&
-  trialmesh-summarize --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --dataset processed --cache-dir ./cache/llm_responses --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --condensed-trial-only --output-dir ./run/summaries &&
-  torchrun --nproc_per_node=4 $(which trialmesh-embed) --multi-gpu --model-path ../../models/bge-large-en-v1.5 --batch-size 512 --normalize --data-dir ./run --dataset summaries &&
-  trialmesh-index build --embeddings ./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy --output ./run/indices/bge-large-en-v1.5_trials_flat.index --index-type flat --m 128 --ef-construction 512 &&
-  trialmesh-index search --index ./run/indices/bge-large-en-v1.5_trials_flat.index --queries ./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./run/results/bge-large-en-v1.5_flat_search_results.json --k 128 &&
-  trialmesh-evaluate --data-dir ./data/sigir2016 --dataset processed &&
-  trialmesh-match --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --include-all-trials --search-results results/bge-large-en-v1.5_flat_search_results.json
+  clear && rm -rv run/ && rm -rv cache/ &&
+  trialmesh-summarize \
+    --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic \
+    --data-dir ./data/sigir2016 \
+    --dataset processed_cut \
+    --cache-dir ./cache/llm_responses \
+    --tensor-parallel-size=4 \
+    --max-model-len=16384 \
+    --batch-size=32 \
+    --output-dir ./run/summaries \
+    --prompt-dir ./prompts \
+    --patient-prompts patient_summary_sigir2016:2048 patient_condensed_sigir2016:512 \
+    --trial-prompts trial_condensed_sigir2016:512 &&
+  torchrun --nproc_per_node=4 \
+    $(which trialmesh-embed) --multi-gpu \
+    --model-path ../../models/bge-large-en-v1.5 \
+    --batch-size 512 \
+    --normalize \
+    --data-dir ./run \
+    --dataset summaries &&
+  trialmesh-index build \
+    --embeddings ./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy \
+    --output ./run/indices/bge-large-en-v1.5_trials_flat.index \
+    --index-type flat \
+    --m 128 \
+    --ef-construction 512 &&
+  trialmesh-index search \
+    --index ./run/indices/bge-large-en-v1.5_trials_flat.index \
+    --queries ./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy \
+    --output ./run/results/bge-large-en-v1.5_flat_search_results.json \
+    --k 128 &&
+  trialmesh-evaluate \
+    --data-dir ./data/sigir2016 \
+    --dataset processed_cut &&
+  trialmesh-match \
+    --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic \
+    --data-dir ./data/sigir2016 \
+    --run-dir ./run \
+    --search-results results/bge-large-en-v1.5_flat_search_results.json \
+    --tensor-parallel-size 4 \
+    --max-model-len=16384 \
+    --prompt-dir ./prompts \
+    --exclusion-prompt exclusion_filter_sigir2016:2048 \
+    --inclusion-prompt inclusion_filter_sigir2016:2048 \
+    --scoring-prompt final_match_scoring_sigir2016:2048 \
+    --include-all-trials
 } |& tee trialmesh_run_$(date +%Y%m%d_%H%M%S).log
 ```
 
@@ -182,8 +272,9 @@ trialmesh/
 │       ├── evaluation/    # Evaluation tools
 │       ├── llm/           # LLM runners and processors
 │       ├── match/         # Matching logic and pipeline
-│       └── utils/         # Prompt registry and utilities
+│       └── utils/         # Utilities and prompt extraction tools
 ├── data/                  # Source data storage
+├── prompts/               # Individual prompt text files
 ├── run/                   # Runtime outputs
 │   ├── summaries/         # LLM-generated summaries
 │   ├── summaries_embeddings/ # Vector embeddings
@@ -208,7 +299,7 @@ TrialMesh processes clinical trial data through several stages:
 
 1. **Data Acquisition:** Download and extract trial documents and patient queries
 2. **Structured Extraction:** Parse XML into structured JSON with clinical fields
-3. **LLM Summarization:** Create both detailed and condensed summaries using LLaMA
+3. **LLM Summarization:** Create summaries using configurable prompts and token limits
 4. **Vector Embedding:** Generate semantic embeddings for efficient retrieval
    - Supports multi-GPU distributed processing for faster embedding generation
 5. **Index Building:** Create optimized FAISS indices for fast similarity search
@@ -271,6 +362,7 @@ The project has implemented:
 - LLM integration with vLLM for trial and patient summarization
 - Structured and condensed summaries optimized for downstream tasks
 - Robust caching and prompt management system
+- File-based prompt system for easy customization
 - Multi-model embedding generation with GPU acceleration
 - Distributed multi-GPU processing for faster embedding generation
 - FAISS indexing and similarity search
