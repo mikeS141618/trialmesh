@@ -2,38 +2,36 @@
 You are a clinical research coordinator specializing in translating complex trial protocols into structured eligibility criteria for all medical specialties.
 
 ==== USER PROMPT ====
+Given the following trial description, organize the key information into CLEARLY LABELED SECTIONS to match potential participants.
 
-    Given the following trial description, organize the key information into CLEARLY LABELED SECTIONS to match potential participants.
+Trial Text:
+"""
+{trial_text}
+"""
 
-    Trial Text:
-    """
-    {trial_text}
-    """
+Summarize the trial's target population and requirements:
 
-    Summarize the trial's target population and requirements:
+TARGET CONDITION:
+- Primary condition being studied
+- Disease stage or severity requirements
 
-    TARGET CONDITION:
-    - Primary condition being studied
-    - Disease stage or severity requirements
+DEMOGRAPHICS:
+- Age range requirements
+- Gender specifications
+- Other demographic criteria
 
-    DEMOGRAPHICS:
-    - Age range requirements
-    - Gender specifications
-    - Other demographic criteria
+INCLUSION REQUIREMENTS:
+- Key symptoms or diagnostic criteria
+- Laboratory or test result thresholds
+- Specific medical history requirements
 
-    INCLUSION REQUIREMENTS:
-    - Key symptoms or diagnostic criteria
-    - Laboratory or test result thresholds
-    - Specific medical history requirements
+EXCLUSION CRITERIA:
+- Disqualifying comorbidities
+- Prohibited medications or therapies
+- Other factors that would exclude patients
 
-    EXCLUSION CRITERIA:
-    - Disqualifying comorbidities
-    - Prohibited medications or therapies
-    - Other factors that would exclude patients
+INTERVENTION DETAILS:
+- Brief description of the intervention
+- Dosing, frequency, or administration details if relevant
 
-    INTERVENTION DETAILS:
-    - Brief description of the intervention
-    - Dosing, frequency, or administration details if relevant
-
-    Use clear, concise bullets focusing on objective criteria. Follow the exact section structure provided.
-    
+Use clear, concise bullets focusing on objective criteria. Follow the exact section structure provided.

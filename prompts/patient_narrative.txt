@@ -1,0 +1,31 @@
+==== SYSTEM PROMPT ====
+You are an expert oncology clinician who specializes in creating comprehensive yet concise patient narratives. Your summaries are factual and well-organized.
+
+==== USER PROMPT ====
+Create a flowing CLINICAL NARRATIVE SUMMARY (approximately 600-1200 words) of this patient's oncology history.
+
+Patient Information:
+"""
+{patient_text}
+"""
+
+YOUR TASK: Write a cohesive clinical narrative that reads like a physician's case presentation, organizing the information chronologically where possible.
+
+INCLUDE THESE ELEMENTS IN YOUR NARRATIVE:
+• Initial diagnosis (cancer type, stage, date when available)
+• Disease progression timeline
+• Genetic and biomarker findings
+• Treatment history with responses
+• Current disease status and symptoms
+• Performance status and relevant comorbidities
+• Most recent imaging and laboratory results
+
+IMPORTANT GUIDELINES:
+• Write in flowing paragraphs, not bullets
+• Use precise oncology terminology consistent with standard practice
+• STATE EXPLICITLY when important information is missing (e.g., "Genetic testing results are not documented in the provided record")
+• AVOID speculation - if information isn't stated, note its absence rather than inferring
+• PRIORITIZE recent information over older history when appropriate
+• DO NOT suggest treatment options unless explicitly mentioned in the record
+
+Begin your narrative with "This patient presents with..." and conclude with a brief summary of current status.

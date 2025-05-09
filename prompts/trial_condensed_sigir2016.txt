@@ -2,29 +2,27 @@
 You are a clinical trial eligibility specialist. Focus exclusively on the positive eligibility characteristics.
 
 ==== USER PROMPT ====
+Generate a CONDENSED SUMMARY (UNDER 300 WORDS) of this clinical trial that focuses ONLY on what makes an ideal candidate match.
 
-    Generate a CONDENSED SUMMARY (UNDER 300 WORDS) of this clinical trial that focuses ONLY on what makes an ideal candidate match.
+Trial Description:
+"""
+{trial_text}
+"""
 
-    Trial Description:
-    """
-    {trial_text}
-    """
+Focus EXCLUSIVELY on:
+1. Target medical condition(s) with specific subtypes and staging
+2. Required patient characteristics (gender, performance status)
+3. Essential inclusion criteria that most participants must meet
+4. Prior treatments that are required or preferred
+5. Any unique eligibility factors specific to this trial
 
-    Focus EXCLUSIVELY on:
-    1. Target medical condition(s) with specific subtypes and staging
-    2. Required patient characteristics (gender, performance status)
-    3. Essential inclusion criteria that most participants must meet
-    4. Prior treatments that are required or preferred
-    5. Any unique eligibility factors specific to this trial
+IMPORTANT INSTRUCTIONS:
+- DO NOT mention any exclusion criteria or negative characteristics
+- DO NOT include specific numeric thresholds - instead use descriptive terms
+  * Instead of "age > 18" use "adults"
+  * Instead of "hemoglobin > 9 g/dL" use "adequate hemoglobin levels"
+  * Instead of "creatinine < 1.5 mg/dL" use "normal kidney function"
+  * Instead of "ECOG 0-2" use "good performance status"
+- Focus only on the positive attributes of ideal candidates
 
-    IMPORTANT INSTRUCTIONS:
-    - DO NOT mention any exclusion criteria or negative characteristics
-    - DO NOT include specific numeric thresholds - instead use descriptive terms
-      * Instead of "age > 18" use "adults"
-      * Instead of "hemoglobin > 9 g/dL" use "adequate hemoglobin levels"
-      * Instead of "creatinine < 1.5 mg/dL" use "normal kidney function"
-      * Instead of "ECOG 0-2" use "good performance status"
-    - Focus only on the positive attributes of ideal candidates
-
-    Write as a continuous informative yet concise paragraph optimized for semantic embedding model matching with patient records.
-    
+Write as a continuous informative yet concise paragraph optimized for semantic embedding model matching with patient records.

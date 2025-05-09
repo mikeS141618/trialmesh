@@ -2,34 +2,32 @@
 You are an expert in oncology trial matching who specializes in creating optimized patient representations for embedding-based retrieval systems. Your summaries focus exclusively on positive attributes relevant for trial matching while avoiding numerical thresholds and negations.
 
 ==== USER PROMPT ====
+Create a CONDENSED PATIENT PROFILE (200-300 words) optimized for semantic matching with clinical trial criteria.
 
-    Create a CONDENSED PATIENT PROFILE (200-300 words) optimized for semantic matching with clinical trial criteria.
+Patient Record:
+"""
+{patient_text}
+"""
 
-    Patient Record:
-    """
-    {patient_text}
-    """
+TASK: Generate a single cohesive paragraph describing this cancer patient's key characteristics for trial matching. This text will be used for embedding-based similarity matching with trial descriptions.
 
-    TASK: Generate a single cohesive paragraph describing this cancer patient's key characteristics for trial matching. This text will be used for embedding-based similarity matching with trial descriptions.
+FOCUS EXCLUSIVELY ON:
+1. Cancer diagnoses with specific histology, molecular subtype, and staging
+2. Biomarkers and genetic mutations with expression status
+3. Key patient characteristics relevant to eligibility (functional status, organ function)
+4. Treatment history including lines of therapy and responses
+5. Current disease status and treatment needs
 
-    FOCUS EXCLUSIVELY ON:
-    1. Cancer diagnoses with specific histology, molecular subtype, and staging
-    2. Biomarkers and genetic mutations with expression status
-    3. Key patient characteristics relevant to eligibility (functional status, organ function)
-    4. Treatment history including lines of therapy and responses
-    5. Current disease status and treatment needs
+CRITICAL GUIDELINES:
+• INCLUDE ONLY POSITIVE ATTRIBUTES that would qualify for trials
+• CONVERT ALL NUMERIC VALUES to descriptive clinical terms:
+  * "adult patient" instead of "52-year-old"
+  * "high PD-L1 expression" instead of "PD-L1 expression 80%"
+  * "adequate renal function" instead of "creatinine 1.1 mg/dL"
+  * "good performance status" instead of "ECOG 1"
+• USE PRECISE ONCOLOGY TERMINOLOGY consistently
+• WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
+• FOCUS ON CURRENT AND FACTUAL patient status
+• DO NOT include exclusion criteria or negative characteristics
 
-    CRITICAL GUIDELINES:
-    • INCLUDE ONLY POSITIVE ATTRIBUTES that would qualify for trials
-    • CONVERT ALL NUMERIC VALUES to descriptive clinical terms:
-      ✓ "adult patient" instead of "52-year-old"
-      ✓ "high PD-L1 expression" instead of "PD-L1 expression 80%"
-      ✓ "adequate renal function" instead of "creatinine 1.1 mg/dL"
-      ✓ "good performance status" instead of "ECOG 1"
-    • USE PRECISE ONCOLOGY TERMINOLOGY consistently
-    • WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
-    • FOCUS ON CURRENT AND FACTUAL patient status
-    • DO NOT include exclusion criteria or negative characteristics
-
-    Your profile should enable optimal semantic similarity matching when compared with trial descriptions formatted in the same style.
-    
+Your profile should enable optimal semantic similarity matching when compared with trial descriptions formatted in the same style.

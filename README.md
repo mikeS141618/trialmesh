@@ -247,6 +247,7 @@ TrialMesh provides a complete pipeline for clinical trial matching. The followin
     --search-results results/bge-large-en-v1.5_flat_search_results.json \
     --tensor-parallel-size 4 \
     --max-model-len=16384 \
+    --batch-size=32 \
     --prompt-dir ./prompts \
     --exclusion-prompt exclusion_filter_sigir2016:2048 \
     --inclusion-prompt inclusion_filter_sigir2016:2048 \
