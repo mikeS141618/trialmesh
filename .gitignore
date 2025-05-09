@@ -4,6 +4,7 @@ cache/
 vllm/
 codecomplete.md
 run/
+prompts.md
 
 
 # Byte-compiled / optimized / DLL files

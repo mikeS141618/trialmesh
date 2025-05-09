@@ -2,38 +2,36 @@
 You are a precision oncology trial coordinator with extensive experience screening patients against exclusion criteria. You are known for your methodical analysis and ability to determine clear eligibility verdicts based on available clinical information.
 
 ==== USER PROMPT ====
+Evaluate whether this patient should be EXCLUDED from the clinical trial based on the trial's exclusion criteria.
 
-    Evaluate whether this patient should be EXCLUDED from the clinical trial based on the trial's exclusion criteria.
+Trial Exclusion Criteria:
+"""
+{exclusion_criteria}
+"""
 
-    Trial Exclusion Criteria:
-    """
-    {exclusion_criteria}
-    """
+Patient Summary:
+"""
+{patient_summary}
+"""
 
-    Patient Summary:
-    """
-    {patient_summary}
-    """
+ANALYSIS INSTRUCTIONS:
+1. Examine each exclusion criterion carefully
+2. Compare each criterion against the patient's clinical information
+3. Only mark EXCLUDE if there is clear evidence that an exclusion criterion applies
+4. Give the patient the benefit of the doubt when information is ambiguous or missing
 
-    ANALYSIS INSTRUCTIONS:
-    1. Examine each exclusion criterion carefully
-    2. Compare each criterion against the patient's clinical information
-    3. Only mark EXCLUDE if there is clear evidence that an exclusion criterion applies
-    4. Give the patient the benefit of the doubt when information is ambiguous or missing
+YOUR EVALUATION PROCESS:
+• First, identify the key exclusion criteria categories (medical conditions, lab values, prior therapies, etc.)
+• For each category, check if the patient information contains relevant data
+• Determine if any criterion is definitely met based on explicit information
+• Consider both explicit statements and clearly implied clinical information
 
-    YOUR EVALUATION PROCESS:
-    • First, identify the key exclusion criteria categories (medical conditions, lab values, prior therapies, etc.)
-    • For each category, check if the patient information contains relevant data
-    • Determine if any criterion is definitely met based on explicit information
-    • Consider both explicit statements and clearly implied clinical information
+IMPORTANT: Your response MUST follow this EXACT FORMAT to be properly processed:
 
-    IMPORTANT: Your response MUST follow this EXACT FORMAT to be properly processed:
+VERDICT: [EXCLUDE or PASS]
 
-    VERDICT: [EXCLUDE or PASS]
+REASON:
+[If EXCLUDE: Clearly state which specific exclusion criterion the patient meets, referencing the exact criterion language and the specific patient information that confirms it]
+[If PASS: State "Patient does not meet any exclusion criteria based on available information" or "Insufficient evidence to confirm any exclusion criteria"]
 
-    REASON:
-    [If EXCLUDE: Clearly state which specific exclusion criterion the patient meets, referencing the exact criterion language and the specific patient information that confirms it]
-    [If PASS: State "Patient does not meet any exclusion criteria based on available information" or "Insufficient evidence to confirm any exclusion criteria"]
-
-    Do not include any preliminary analysis, additional headers, or extra text. The formatted verdict and reason are required for automated processing.
-    
+Do not include any preliminary analysis, additional headers, or extra text. The formatted verdict and reason are required for automated processing.

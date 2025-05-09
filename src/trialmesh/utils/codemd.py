@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 def read_file(path):
     """Read a file and return its contents.
 
@@ -16,6 +17,7 @@ def read_file(path):
     except Exception as e:
         return f"Could not read {path}: {e}"
 
+
 def get_src_root():
     """Get the root of the source directory.
 
@@ -26,6 +28,7 @@ def get_src_root():
     src_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
     return src_dir
 
+
 def get_project_root():
     """Get the root of the project directory.
 
@@ -33,6 +36,7 @@ def get_project_root():
         Path to the project root directory (parent of src)
     """
     return os.path.abspath(os.path.join(get_src_root(), '..'))
+
 
 def build_tree(root):
     """Build a text representation of the directory tree.
@@ -57,6 +61,7 @@ def build_tree(root):
             tree_lines.append(f"{indent}    {fname}")
     return '\n'.join(tree_lines)
 
+
 def collect_python_files(root):
     """Collect all Python files in a directory recursively.
 
@@ -74,6 +79,26 @@ def collect_python_files(root):
                 rel_path = os.path.relpath(full_path, os.path.dirname(root))
                 py_files.append((rel_path, read_file(full_path)))
     return py_files
+
+
+def collect_txt_files(root):
+    """Collect all text files in a directory recursively.
+
+    Args:
+        root: Root directory to search from
+
+    Returns:
+        List of tuples (relative_path, file_content) for each text file
+    """
+    txt_files = []
+    for dirpath, _, filenames in os.walk(root):
+        for fname in sorted(filenames):
+            if fname.endswith('.txt'):
+                full_path = os.path.join(dirpath, fname)
+                rel_path = os.path.relpath(full_path, root)
+                txt_files.append((rel_path, read_file(full_path)))
+    return txt_files
+
 
 def generate_codemd():
     """Generate a Markdown file with code documentation.
@@ -112,10 +137,45 @@ def generate_codemd():
             out.write(f"## {rel_path}\n\n")
             out.write(f"```python\n{content}\n```\n\n")
 
+
+def generate_promptsmd():
+    """Generate a Markdown file with prompt documentation.
+
+    This function creates a Markdown document that includes all text files
+    from the prompts directory.
+
+    The output file is written to prompts.md in the project root.
+    """
+    project_root = get_project_root()
+    prompts_dir = os.path.join(project_root, 'prompts')
+    output_path = os.path.join(project_root, 'prompts.md')
+
+    if not os.path.exists(prompts_dir):
+        print(f"Warning: Prompts directory not found at {prompts_dir}")
+        return 0
+
+    txt_files = collect_txt_files(prompts_dir)
+
+    with open(output_path, 'w', encoding='utf-8') as out:
+        out.write("# Prompt Files\n\n")
+        for rel_path, content in txt_files:
+            out.write(f"## {rel_path}\n\n")
+            out.write(f"```\n{content}\n```\n\n")
+
+    return len(txt_files)
+
+
 def cli_main():
     """Entry point for trialmesh-codemd CLI tool."""
     generate_codemd()
     print("codecomplete.md generated at project root.")
+
+    count = generate_promptsmd()
+    if count:
+        print(f"prompts.md generated at project root with {count} text files.")
+    else:
+        print("No prompt files found to generate prompts.md.")
+
 
 if __name__ == "__main__":
     cli_main()

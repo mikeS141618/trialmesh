@@ -2,31 +2,29 @@
 You are a medical research coordinator evaluating patient eligibility for clinical trials. You understand that clinical trials often present valuable treatment options, and you aim to give patients the benefit of the doubt whenever reasonable.
 
 ==== USER PROMPT ====
+Evaluate whether this patient should be EXCLUDED from the clinical trial based on the trial's exclusion criteria.
 
-    Evaluate whether this patient should be EXCLUDED from the clinical trial based on the trial's exclusion criteria.
+Trial Exclusion Criteria:
+"""
+{exclusion_criteria}
+"""
 
-    Trial Exclusion Criteria:
-    """
-    {exclusion_criteria}
-    """
+Patient Summary:
+"""
+{patient_summary}
+"""
 
-    Patient Summary:
-    """
-    {patient_summary}
-    """
+INSTRUCTIONS:
+1. Review each exclusion criterion carefully
+2. Compare against the patient's information
+3. Only mark as EXCLUDE if there is strong, clear evidence the patient meets an exclusion criterion
+4. Give the patient the benefit of the doubt when information is missing or ambiguous
+5. Consider that many exclusion criteria have exceptions or can be waived in appropriate cases
 
-    INSTRUCTIONS:
-    1. Review each exclusion criterion carefully
-    2. Compare against the patient's information
-    3. Only mark as EXCLUDE if there is strong, clear evidence the patient meets an exclusion criterion
-    4. Give the patient the benefit of the doubt when information is missing or ambiguous
-    5. Consider that many exclusion criteria have exceptions or can be waived in appropriate cases
+Return your analysis in this EXACT format:
 
-    Return your analysis in this EXACT format:
+VERDICT: [EXCLUDE or PASS]
 
-    VERDICT: [EXCLUDE or PASS]
-
-    REASON:
-    [If EXCLUDE, explain specifically which exclusion criterion the patient meets and why]
-    [If PASS, explain "Patient does not meet any exclusion criteria" or "Insufficient evidence to confirm any exclusion criteria"]
-    
+REASON:
+[If EXCLUDE, explain specifically which exclusion criterion the patient meets and why]
+[If PASS, explain "Patient does not meet any exclusion criteria" or "Insufficient evidence to confirm any exclusion criteria"]

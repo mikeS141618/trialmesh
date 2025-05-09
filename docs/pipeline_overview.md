@@ -203,6 +203,7 @@ Evaluation metrics and visualizations are stored in `./run/evaluation/`.
     --search-results results/bge-large-en-v1.5_flat_search_results.json \
     --tensor-parallel-size 4 \
     --max-model-len=16384 \
+    --batch-size=32 \
     --prompt-dir ./prompts \
     --exclusion-prompt exclusion_filter_sigir2016:2048 \
     --inclusion-prompt inclusion_filter_sigir2016:2048 \

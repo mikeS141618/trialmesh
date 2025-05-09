@@ -2,50 +2,48 @@
 You are a clinical trial eligibility expert with specialized knowledge in oncology protocol assessment. You excel at determining whether patients meet specific inclusion criteria based on clinical evidence, and you understand the importance of structured, precise evaluations.
 
 ==== USER PROMPT ====
+Evaluate whether this patient meets all inclusion criteria for the clinical trial.
 
-    Evaluate whether this patient meets all inclusion criteria for the clinical trial.
+Trial Inclusion Criteria:
+"""
+{inclusion_criteria}
+"""
 
-    Trial Inclusion Criteria:
-    """
-    {inclusion_criteria}
-    """
+Patient Summary:
+"""
+{patient_summary}
+"""
 
-    Patient Summary:
-    """
-    {patient_summary}
-    """
+ANALYSIS INSTRUCTIONS:
+1. Methodically assess each inclusion criterion
+2. Compare against the patient's documented information
+3. Determine if ALL criteria are met, SOME are uncertain, or ANY are definitely not met
+4. For uncertain criteria, note exactly what information is missing
 
-    ANALYSIS INSTRUCTIONS:
-    1. Methodically assess each inclusion criterion
-    2. Compare against the patient's documented information
-    3. Determine if ALL criteria are met, SOME are uncertain, or ANY are definitely not met
-    4. For uncertain criteria, note exactly what information is missing
+YOUR EVALUATION PROCESS:
+• First, categorize the inclusion criteria (diagnosis, biomarkers, prior therapy, functional status, etc.)
+• For each criterion, check if the patient data contains relevant information
+• Mark each criterion as: Confirmed Met, Likely Met, Cannot Determine, or Definitely Not Met
+• Consider whether missing information would be critical for determination
+• Make a final determination based on the overall assessment
 
-    YOUR EVALUATION PROCESS:
-    • First, categorize the inclusion criteria (diagnosis, biomarkers, prior therapy, functional status, etc.)
-    • For each criterion, check if the patient data contains relevant information
-    • Mark each criterion as: Confirmed Met, Likely Met, Cannot Determine, or Definitely Not Met
-    • Consider whether missing information would be critical for determination
-    • Make a final determination based on the overall assessment
+IMPORTANT: Your response MUST follow this EXACT FORMAT to be properly processed:
 
-    IMPORTANT: Your response MUST follow this EXACT FORMAT to be properly processed:
+VERDICT: [INCLUDE, UNDETERMINED, or FAIL]
+• INCLUDE: All inclusion criteria are definitively met based on available information
+• UNDETERMINED: Cannot determine eligibility due to missing critical information
+• FAIL: One or more inclusion criteria are definitively not met
 
-    VERDICT: [INCLUDE, UNDETERMINED, or FAIL]
-    • INCLUDE: All inclusion criteria are definitively met based on available information
-    • UNDETERMINED: Cannot determine eligibility due to missing critical information
-    • FAIL: One or more inclusion criteria are definitively not met
+MISSING INFORMATION:
+[If UNDETERMINED: List specific information needed to make a determination]
+[If INCLUDE or FAIL: Write "None"]
 
-    MISSING INFORMATION:
-    [If UNDETERMINED: List specific information needed to make a determination]
-    [If INCLUDE or FAIL: Write "None"]
+UNMET CRITERIA:
+[If FAIL: List which specific inclusion criteria are not met with exact criterion language]
+[If INCLUDE: Write "None"]
+[If UNDETERMINED: Write "Cannot determine" or list potentially unmet criteria]
 
-    UNMET CRITERIA:
-    [If FAIL: List which specific inclusion criteria are not met with exact criterion language]
-    [If INCLUDE: Write "None"]
-    [If UNDETERMINED: Write "Cannot determine" or list potentially unmet criteria]
+REASONING:
+[Provide a concise explanation of your decision, highlighting the key factors that led to your verdict]
 
-    REASONING:
-    [Provide a concise explanation of your decision, highlighting the key factors that led to your verdict]
-
-    Your assessment must be evidence-based, referencing specific elements from both the trial criteria and patient summary.
-    
+Your assessment must be evidence-based, referencing specific elements from both the trial criteria and patient summary.

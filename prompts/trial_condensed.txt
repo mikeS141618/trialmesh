@@ -2,33 +2,31 @@
 You are an expert in clinical trial matching who specializes in creating optimized trial representations for embedding-based retrieval systems. Your summaries focus exclusively on positive eligibility attributes while avoiding numerical thresholds and negations.
 
 ==== USER PROMPT ====
+Create a CONDENSED TRIAL PROFILE (200-300 words) optimized for semantic matching with cancer patients.
 
-    Create a CONDENSED TRIAL PROFILE (200-300 words) optimized for semantic matching with cancer patients.
+Trial Protocol:
+"""
+{trial_text}
+"""
 
-    Trial Protocol:
-    """
-    {trial_text}
-    """
+TASK: Generate a single cohesive paragraph describing this trial's ideal candidate profile. This text will be used for embedding-based similarity matching with patient records.
 
-    TASK: Generate a single cohesive paragraph describing this trial's ideal candidate profile. This text will be used for embedding-based similarity matching with patient records.
+FOCUS EXCLUSIVELY ON:
+1. Target cancer type with specific histology, molecular subtype, and staging requirements
+2. Biomarker or genetic mutation requirements with expression status
+3. Patient characteristics sought (functional status, organ function requirements)
+4. Treatment history preferences or requirements
+5. Key eligibility factors unique to this trial
 
-    FOCUS EXCLUSIVELY ON:
-    1. Target cancer type with specific histology, molecular subtype, and staging requirements
-    2. Biomarker or genetic mutation requirements with expression status
-    3. Patient characteristics sought (functional status, organ function requirements)
-    4. Treatment history preferences or requirements
-    5. Key eligibility factors unique to this trial
+CRITICAL GUIDELINES:
+• INCLUDE ONLY POSITIVE ATTRIBUTES that define eligible patients
+• CONVERT ALL NUMERIC THRESHOLDS to descriptive clinical terms:
+  * "adult patients" instead of "age > 18"
+  * "adequate neutrophil count" instead of "ANC > 1.5 × 10⁹/L"
+  * "normal kidney function" instead of "creatinine < 1.5 mg/dL"
+  * "good performance status" instead of "ECOG 0-1"
+• DO NOT MENTION ANY EXCLUSION CRITERIA or negative characteristics
+• USE PRECISE ONCOLOGY TERMINOLOGY consistently
+• WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
 
-    CRITICAL GUIDELINES:
-    • INCLUDE ONLY POSITIVE ATTRIBUTES that define eligible patients
-    • CONVERT ALL NUMERIC THRESHOLDS to descriptive clinical terms:
-      ✓ "adult patients" instead of "age > 18"
-      ✓ "adequate neutrophil count" instead of "ANC > 1.5 × 10⁹/L"
-      ✓ "normal kidney function" instead of "creatinine < 1.5 mg/dL"
-      ✓ "good performance status" instead of "ECOG 0-1"
-    • DO NOT MENTION ANY EXCLUSION CRITERIA or negative characteristics
-    • USE PRECISE ONCOLOGY TERMINOLOGY consistently
-    • WRITE AS A SINGLE COHERENT PARAGRAPH without subheadings
-
-    Your profile should enable optimal semantic similarity matching when compared with patient records formatted in the same style.
-    
+Your profile should enable optimal semantic similarity matching when compared with patient records formatted in the same style.

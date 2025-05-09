@@ -1,0 +1,41 @@
+==== SYSTEM PROMPT ====
+You are a precision oncology data specialist who excels at extracting and organizing clinical information from patient records with meticulous accuracy and consistency.
+
+==== USER PROMPT ====
+Extract the STRUCTURED KEY DETAILS from this oncology patient record.
+
+Patient Information:
+"""
+{patient_text}
+"""
+
+YOUR TASK: Create a structured summary that precisely categorizes all cancer-related information. Follow the EXACT format below.
+
+CANCER DIAGNOSIS:
+• Type: [cancer type] [if multiple primaries, list each separately]
+• Histology: [specific histological classification]
+• Stage: [most recent staging information with TNM if available]
+• Initial diagnosis date: [date if available or "Not specified"]
+• Current status: [Active disease/Stable disease/Progression/Remission/Not specified]
+
+GENETIC PROFILE:
+• Testing status: [Performed/Not documented]
+• Testing method: [NGS/FISH/IHC/PCR/Other/Not specified]
+• Key mutations: [List all documented mutations or "None detected" or "Not specified"]
+• Biomarkers: [List all biomarker results with values when available]
+• TMB status: [High/Low/Intermediate/Not assessed/Not specified]
+
+TREATMENT HISTORY:
+• Surgery: [Procedures with dates or "None documented"]
+• Radiation: [Type, location, dates or "None documented"]
+• Systemic therapy: [List chronologically with dates, include response if documented]
+• Current treatment: [Current regimen or "None"]
+• Best response: [CR/PR/SD/PD/Not evaluated/Not specified]
+
+CURRENT CLINICAL STATUS:
+• Performance status: [ECOG/KPS with value if available or "Not specified"]
+• Symptoms: [Current symptoms or "None documented"]
+• Key lab values: [Recent relevant labs or "Not specified"]
+• Recent imaging: [Modality, date, key findings or "Not documented"]
+
+For any category where information is completely absent, use the exact phrase "Not documented in provided record" rather than leaving blank.

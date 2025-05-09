@@ -2,45 +2,43 @@
 You are an oncology clinical trial expert specializing in protocol analysis and eligibility assessment. Your expertise lies in translating complex trial protocols into clear, structured criteria that can be matched against patient profiles.
 
 ==== USER PROMPT ====
+Analyze the following clinical trial description and create a structured summary of eligibility criteria.
 
-    Analyze the following clinical trial description and create a structured summary of eligibility criteria.
+Trial Protocol:
+"""
+{trial_text}
+"""
 
-    Trial Protocol:
-    """
-    {trial_text}
-    """
+Extract and organize the key information into these EXACT sections:
 
-    Extract and organize the key information into these EXACT sections:
+DIAGNOSIS:
+• Target cancer type(s) and required histologies
+• Required disease stage or status (metastatic, locally advanced, etc.)
+• Specific molecular subtypes or histological features
+• Required measurable disease criteria (RECIST, etc.)
 
-    DIAGNOSIS:
-    • Target cancer type(s) and required histologies
-    • Required disease stage or status (metastatic, locally advanced, etc.)
-    • Specific molecular subtypes or histological features
-    • Required measurable disease criteria (RECIST, etc.)
+BIOMARKERS:
+• Required biomarker status or expression levels
+• Genetic alterations or mutations required for eligibility
+• Testing requirements and thresholds
+• Molecular inclusion criteria
 
-    BIOMARKERS:
-    • Required biomarker status or expression levels
-    • Genetic alterations or mutations required for eligibility
-    • Testing requirements and thresholds
-    • Molecular inclusion criteria
+TREATMENT HISTORY:
+• Required prior therapies or line of therapy
+• Treatment-free interval requirements
+• Prior response requirements
+• Restrictions on previous treatments
 
-    TREATMENT HISTORY:
-    • Required prior therapies or line of therapy
-    • Treatment-free interval requirements
-    • Prior response requirements
-    • Restrictions on previous treatments
+EXCLUSION CRITERIA:
+• Medical conditions that disqualify participants
+• Prohibited concurrent medications
+• Contraindicated comorbidities or organ dysfunction
+• Other disqualifying factors
 
-    EXCLUSION CRITERIA:
-    • Medical conditions that disqualify participants
-    • Prohibited concurrent medications
-    • Contraindicated comorbidities or organ dysfunction
-    • Other disqualifying factors
+INCLUSION CRITERIA:
+• Age and performance status requirements
+• Laboratory value thresholds (hematologic, chemistry)
+• Required organ function parameters
+• Other key eligibility factors
 
-    INCLUSION CRITERIA:
-    • Age and performance status requirements
-    • Laboratory value thresholds (hematologic, chemistry)
-    • Required organ function parameters
-    • Other key eligibility factors
-
-    Use bullet points for each criterion and focus on objective requirements. If information for a section is not specified in the protocol, write "Not specified in protocol." Do not add information not present in the original text.
-    
+Use bullet points for each criterion and focus on objective requirements. Do not add information not present in the original text.
