@@ -14,13 +14,31 @@ from trialmesh.utils.prompt_config import PromptConfig
 
 
 def load_jsonl(file_path: str) -> List[Dict[str, Any]]:
-    """Load data from a JSONL file."""
+    """Load data from a JSONL file.
+
+    This utility function reads a JSONL file and returns a list of
+    parsed objects, handling empty lines appropriately.
+
+    Args:
+        file_path: Path to the JSONL file
+
+    Returns:
+        List of parsed objects from the file
+    """
     with open(file_path, 'r', encoding='utf-8') as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
 def save_jsonl(data: List[Dict[str, Any]], file_path: str) -> None:
-    """Save data to a JSONL file."""
+    """Save data to a JSONL file.
+
+    This utility function writes a list of objects to a JSONL file,
+    creating directories as needed.
+
+    Args:
+        data: List of dictionaries to save
+        file_path: Path to save the JSONL file
+    """
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         for item in data:
@@ -33,6 +51,11 @@ class Summarizer:
 
     This class handles the creation of summaries for both clinical trials
     and patient records using multiple prompt configurations.
+
+    Attributes:
+        runner (LlamaRunner): LLM runner instance
+        prompt_registry (PromptRegistry): Registry with available prompts
+        prompt_runner (PromptRunner): Interface for running prompts
     """
 
     def __init__(
@@ -61,6 +84,12 @@ class Summarizer:
                          prompt_configs: List[PromptConfig],
                          batch_size: int = 8) -> None:
         """Generate summaries for clinical trials using multiple prompts.
+
+        This method:
+        1. Loads trial documents from the specified path
+        2. Processes them using each specified prompt configuration
+        3. Generates summaries in batches for efficiency
+        4. Saves the results to JSONL files with appropriate names
 
         Args:
             trials_path: Path to the trial documents JSONL file
@@ -121,6 +150,12 @@ class Summarizer:
                            prompt_configs: List[PromptConfig],
                            batch_size: int = 8) -> None:
         """Generate summaries for patient records using multiple prompts.
+
+        This method:
+        1. Loads patient records from the specified path
+        2. Processes them using each specified prompt configuration
+        3. Generates summaries in batches for efficiency
+        4. Saves the results to JSONL files with appropriate names
 
         Args:
             patients_path: Path to the patient records JSONL file

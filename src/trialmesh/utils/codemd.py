@@ -37,6 +37,10 @@ def get_project_root():
 def build_tree(root):
     """Build a text representation of the directory tree.
 
+    This function generates a formatted text representation of the directory
+    structure starting from the specified root, with proper indentation
+    to indicate directory hierarchy.
+
     Args:
         root: Root directory to build tree from
 

@@ -15,6 +15,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 def download_file(url, destination_path):
     """Download a file from url to destination_path with progress bar.
 
+    This function handles file downloads with proper progress reporting,
+    error handling, and directory creation.
+
     Args:
         url: URL to download from
         destination_path: Path to save the downloaded file
@@ -23,7 +26,8 @@ def download_file(url, destination_path):
         Path to the downloaded file
 
     Raises:
-        Exception: If download fails
+        Exception: If download fails due to connection issues,
+                  permission errors, or other problems
     """
     response = requests.get(url, stream=True)
     response.raise_for_status()  # Raise exception for HTTP errors
@@ -51,7 +55,8 @@ def download_paper(data_dir):
     """Download the reference paper.
 
     This function downloads the SIGIR2016 clinical trials collection
-    reference paper.
+    reference paper, which contains important information about the
+    dataset structure, format, and evaluation methodology.
 
     Args:
         data_dir: Directory to save the paper
@@ -76,12 +81,15 @@ def download_paper(data_dir):
 def process_download_links_file(links_file_path, data_dir):
     """Parse the download links file and return a list of URL and destination pairs.
 
+    This function extracts download information from the CSIRO Data Portal
+    download links file, mapping each URL to its appropriate destination path.
+
     Args:
         links_file_path: Path to the file containing download links
         data_dir: Base data directory
 
     Returns:
-        List of (url, destination_path) tuples
+        List of (url, destination_path) tuples for all files to download
     """
     if not links_file_path.exists():
         print(f"Error: Download links file does not exist at {links_file_path}")
@@ -125,7 +133,11 @@ def download_dataset(links_file_path, data_dir):
     """Download all files from the dataset using the links file.
 
     This function handles the downloading and extraction of the SIGIR2016
-    clinical trials dataset.
+    clinical trials dataset. It:
+    1. Processes a file containing download links
+    2. Downloads all specified files in parallel
+    3. Extracts compressed archives when found
+    4. Reports on success and failure rates
 
     Args:
         links_file_path: Path to file containing download links

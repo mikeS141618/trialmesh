@@ -104,6 +104,7 @@ def parse_prompt_spec(prompt_spec: str) -> tuple:
     Returns:
         Tuple of (prompt_name, max_tokens, temperature) with None for unspecified values
     """
+
     parts = prompt_spec.split(':')
     prompt_name = parts[0]
     max_tokens = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
@@ -113,7 +114,22 @@ def parse_prompt_spec(prompt_spec: str) -> tuple:
 
 
 def main():
-    """Main entry point for the script."""
+    """Main entry point for the trial matching script.
+
+    This function orchestrates the complete trial matching process:
+    1. Setting up logging and environment
+    2. Initializing the LLM with the specified model
+    3. Loading patient summaries and trial data
+    4. Loading search results from vector retrieval
+    5. Running the multi-stage matching pipeline
+    6. Saving detailed match results to disk
+
+    The matching process applies clinical reasoning to determine which
+    trials are appropriate for each patient, with explanations for each
+    decision. The process can optionally skip certain stages (exclusion,
+    inclusion, or scoring) based on command-line arguments.
+    """
+
     args = parse_args()
     setup_logging(args.log_level)
 

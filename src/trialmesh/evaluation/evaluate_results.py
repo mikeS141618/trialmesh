@@ -170,8 +170,17 @@ def per_query_stats(df_tsv: pd.DataFrame, df_results_long: pd.DataFrame) -> pd.D
         df_results_long: Flattened DataFrame of search results
 
     Returns:
-        DataFrame with per-query statistics
+        DataFrame with per-query statistics including:
+        - total_score_1: Total documents with relevance score 1
+        - total_score_2: Total documents with relevance score 2
+        - found_score_1: Number of relevance 1 documents found
+        - found_score_2: Number of relevance 2 documents found
+        - missing_score_1: Number of relevance 1 documents missed
+        - missing_score_2: Number of relevance 2 documents missed
+        - percent_missing_1: Percentage of relevance 1 documents missed
+        - percent_missing_2: Percentage of relevance 2 documents missed
     """
+
     df_tsv = df_tsv.copy()
     df_tsv['label_1'] = (df_tsv['score'] == 1).astype(int)
     df_tsv['label_2'] = (df_tsv['score'] == 2).astype(int)
@@ -223,13 +232,15 @@ def calculate_metrics(df_tsv: pd.DataFrame, df_results_long: pd.DataFrame) -> Di
     This function computes overall evaluation metrics, including:
     - Total relevant documents at each relevance level
     - Number and percentage of documents found/missed
+    - Success rates for different relevance levels
 
     Args:
         df_tsv: DataFrame with relevance judgments
         df_results_long: Flattened DataFrame of search results
 
     Returns:
-        Dictionary of evaluation metrics
+        Dictionary of evaluation metrics including counts and percentages
+        for both relevance level 1 and 2 documents
     """
     # Get per-query statistics first
     per_query = per_query_stats(df_tsv, df_results_long)
@@ -313,7 +324,7 @@ def find_result_files(results_dir: str, models: List[str] = None,
     """Find result files to evaluate.
 
     This function locates search result files that match the specified
-    criteria for evaluation.
+    criteria for evaluation, handling various naming patterns.
 
     Args:
         results_dir: Directory containing result files
@@ -368,7 +379,9 @@ def generate_visualizations(summary_df: pd.DataFrame, output_prefix: str = None)
     """Generate visualization plots.
 
     This function creates bar plots comparing model performance across
-    different relevance levels.
+    different relevance levels. The plots show percentage of relevant
+    documents found for each model, with separate bars for different
+    relevance scores.
 
     Args:
         summary_df: DataFrame with model performance summaries
@@ -434,6 +447,10 @@ def evaluate_models(args):
     3. Analyzing each model's performance
     4. Creating summary tables and visualizations
     5. Saving results to files if requested
+
+    The evaluation compares retrieved results against gold standard
+    relevance judgments, calculating precision, recall and other metrics
+    for each model.
 
     Args:
         args: Command-line arguments namespace

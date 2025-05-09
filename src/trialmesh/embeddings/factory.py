@@ -14,6 +14,13 @@ class EmbeddingModelFactory:
     This factory class provides a centralized way to instantiate different
     embedding models based on type or path, handling auto-detection and
     initialization details.
+
+    The factory supports multiple embedding model types including:
+    - E5 models (e5-large-v2)
+    - BGE models (bge-large-v1.5)
+    - SapBERT models
+    - BioClinicalBERT models
+    - BlueBERT models
     """
 
     @staticmethod
@@ -34,7 +41,7 @@ class EmbeddingModelFactory:
             An instance of the requested embedding model
 
         Raises:
-            ValueError: If model_type is unknown
+            ValueError: If model_type is unknown or cannot be auto-detected
         """
         # Auto-detect model type from path if not specified
         if (model_type not in MODEL_REGISTRY or model_type is None) and model_path:

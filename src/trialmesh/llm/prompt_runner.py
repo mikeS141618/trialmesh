@@ -11,6 +11,10 @@ class PromptRunner:
 
     This class connects the LlamaRunner with the PromptRegistry, providing
     a simplified interface for formatting and running prompts with variables.
+
+    Attributes:
+        llm (LlamaRunner): LlamaRunner instance for generating text
+        prompts (PromptRegistry): Registry with available prompt templates
     """
 
     def __init__(
@@ -32,6 +36,12 @@ class PromptRunner:
                    max_tokens: Optional[int] = None,
                    temperature: Optional[float] = None) -> LlamaResponse:
         """Run a prompt from the registry with the given variables.
+
+        This method:
+        1. Retrieves the specified prompt template from the registry
+        2. Formats the template with the provided variables
+        3. Generates a response using the LLM
+        4. Returns the response with metadata
 
         Args:
             prompt_name: Name of the prompt template in the registry

@@ -14,10 +14,10 @@ class SearchResult:
     including document IDs, similarity scores, and query information.
 
     Attributes:
-        query_id: ID of the query document
-        doc_ids: List of retrieved document IDs
-        distances: List of distances/scores for retrieved documents
-        original_query: Original query vector (optional)
+        query_id (str): ID of the query document
+        doc_ids (List[str]): List of retrieved document IDs
+        distances (List[float]): List of distances/scores for retrieved documents
+        original_query (Optional[np.ndarray]): Original query vector (optional)
     """
 
     def __init__(
@@ -69,11 +69,11 @@ class FaissSearcher:
     and result processing.
 
     Attributes:
-        index_builder: FaissIndexBuilder with the index
+        index_builder (FaissIndexBuilder): FaissIndexBuilder with the index
         index: The FAISS index object
-        dimension: Embedding dimension
-        metric: Distance metric used
-        id_map: Mapping between internal FAISS IDs and document IDs
+        dimension (int): Embedding dimension
+        metric (str): Distance metric used
+        id_map (dict): Mapping between internal FAISS IDs and document IDs
     """
 
     def __init__(
@@ -121,6 +121,7 @@ class FaissSearcher:
             query_id: ID for the query (for result tracking)
             k: Number of results to return
             normalize: Whether to normalize the query vector
+                       If None, defaults to True for cosine metric, False otherwise
 
         Returns:
             SearchResult object with matches

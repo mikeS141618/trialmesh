@@ -79,6 +79,9 @@ def setup_logging(args):
 def time_function(func_name, start_time):
     """Log the execution time of a function if in debug mode.
 
+    This utility function calculates and logs the execution time of
+    a function, but only if the logging level is set to DEBUG or lower.
+
     Args:
         func_name: Name of the function being timed
         start_time: Start time of the function execution
@@ -91,7 +94,10 @@ def time_function(func_name, start_time):
 def clean_text(text):
     """Clean and normalize text content.
 
-    This function removes excess whitespace and normalizes special characters.
+    This function performs several text normalization steps:
+    1. Removing excess whitespace
+    2. Replacing Unicode characters with ASCII equivalents
+    3. Normalizing special symbols
 
     Args:
         text: Text to clean
@@ -112,7 +118,16 @@ def process_xml_file(file_path):
     """Extract relevant data from a clinical trial XML file.
 
     This function parses a clinical trial XML document and extracts
-    structured information about the trial.
+    structured information about the trial, including:
+    - Trial identifier (NCT ID)
+    - Title
+    - Summary
+    - Detailed description
+    - Inclusion and exclusion criteria
+    - Enrollment information
+    - Interventions
+    - Conditions
+    - Phase information
 
     Args:
         file_path: Path to the XML file
@@ -198,7 +213,9 @@ def copy_and_transform_files(data_dir, output_dir):
     """Transform and copy auxiliary files from the dataset.
 
     This function handles the conversion of supporting files from the
-    SIGIR2016 dataset into formats used by TrialMesh.
+    SIGIR2016 dataset into formats used by TrialMesh. Specifically:
+    1. Transforms adhoc-queries.json to queries.jsonl format
+    2. Transforms qrels-clinical_trials.txt to test.tsv format
 
     Args:
         data_dir: Base data directory

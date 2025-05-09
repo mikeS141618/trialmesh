@@ -11,9 +11,9 @@ class EmbeddingDataset(Dataset):
     loading and batching of text data for embedding generation.
 
     Attributes:
-        texts: List of texts to encode
-        ids: List of document IDs corresponding to texts
-        max_length: Maximum sequence length for tokenization
+        texts (List[str]): List of texts to encode
+        ids (List[str]): List of document IDs corresponding to texts
+        max_length (int): Maximum sequence length for tokenization
     """
 
     def __init__(self, texts: List[str], ids: List[str], max_length: int = 512):
@@ -32,6 +32,17 @@ class EmbeddingDataset(Dataset):
         return len(self.texts)
 
     def __getitem__(self, idx):
+        """Get a single item from the dataset.
+
+        This method returns a dictionary containing the text and ID
+        for the specified index.
+
+        Args:
+            idx: Index of the item to retrieve
+
+        Returns:
+            Dictionary with 'text' and 'id' keys
+        """
         return {
             "text": self.texts[idx],
             "id": self.ids[idx]

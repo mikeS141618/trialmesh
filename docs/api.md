@@ -28,7 +28,10 @@ llm = LlamaRunner(
     cache_dir="./cache/llm_responses",
     tensor_parallel_size=4,
     max_tokens=1024,
-    max_model_len=2048
+    max_model_len=2048,
+    max_batch_size=8,
+    use_cache=True,
+    temperature=0.0
 )
 
 # Generate text from a prompt
@@ -43,6 +46,21 @@ response = llm.generate(
 generated_text = response.text
 input_token_count = response.input_tokens
 output_token_count = response.output_tokens
+original_user_prompt = response.user_prompt
+original_system_prompt = response.system_prompt
+
+# Generate responses for multiple prompts in batch
+prompts = [
+    "Summarize the patient's condition.",
+    "List key medical history.",
+    "Identify potential contraindications."
+]
+batch_responses = llm.generate_batch(
+    prompts=prompts,
+    system_prompt="You are a clinical trial coordinator.",
+    max_tokens=800,
+    temperature=0.1
+)
 ```
 
 ### PromptRunner
@@ -53,24 +71,30 @@ A higher-level interface that connects the LLM with prompt templates.
 from trialmesh.llm.prompt_runner import PromptRunner
 from trialmesh.utils.prompt_registry import PromptRegistry
 
-# Initialize with a LlamaRunner
-prompt_runner = PromptRunner(llm)
+# Initialize with LlamaRunner and PromptRegistry
+prompt_registry = PromptRegistry(prompt_dir="./prompts")
+prompt_runner = PromptRunner(
+    llama_runner=llm,
+    prompt_registry=prompt_registry
+)
 
 # Run a prompt from the registry
 response = prompt_runner.run_prompt(
-    prompt_name="patient_summary",
+    prompt_name="patient_summary_sigir2016",
     variables={"patient_text": "Patient presents with..."},
-    max_tokens=1024
+    max_tokens=1024,
+    temperature=0.0
 )
 
 # Process a batch of documents
 responses = prompt_runner.run_prompt_batch(
-    prompt_name="trial_condensed",
+    prompt_name="trial_condensed_sigir2016",
     variables_list=[
         {"trial_text": "Trial 1 details..."},
         {"trial_text": "Trial 2 details..."}
     ],
-    max_tokens=512
+    max_tokens=512,
+    temperature=0.0
 )
 ```
 
@@ -80,29 +104,59 @@ Handles the generation of structured clinical summaries.
 
 ```python
 from trialmesh.llm.summarizers import Summarizer
+from trialmesh.utils.prompt_config import PromptConfig
 
 # Initialize with model configuration
 summarizer = Summarizer(
     model_path="/path/to/llama-model",
+    prompt_dir="./prompts",
     cache_dir="./cache/llm_responses",
-    tensor_parallel_size=4
+    tensor_parallel_size=4,
+    max_model_len=16384,
+    batch_size=8
 )
+
+# Define prompt configurations
+trial_prompts = [
+    PromptConfig(
+        name="trial_summary_sigir2016",
+        max_tokens=8000,
+        temperature=0.0
+    ),
+    PromptConfig(
+        name="trial_condensed_sigir2016",
+        max_tokens=512,
+        temperature=0.0
+    )
+]
+
+patient_prompts = [
+    PromptConfig(
+        name="patient_summary_sigir2016",
+        max_tokens=2048,
+        temperature=0.0
+    ),
+    PromptConfig(
+        name="patient_condensed_sigir2016",
+        max_tokens=512,
+        temperature=0.0
+    )
+]
 
 # Generate summaries for trials
 summarizer.summarize_trials(
-    trials_path="./data/sigir2016/processed_cut/corpus.jsonl",
-    output_dir="./data/sigir2016/summaries",
-    batch_size=8,
-    max_tokens=1024,
-    condensed_trial_only=True
+    trials_path="./data/sigir2016/processed/corpus.jsonl",
+    output_dir="./run/summaries",
+    prompt_configs=trial_prompts,
+    batch_size=8
 )
 
 # Generate summaries for patients
 summarizer.summarize_patients(
-    patients_path="./data/sigir2016/processed_cut/queries.jsonl",
-    output_dir="./data/sigir2016/summaries",
-    batch_size=8,
-    max_tokens=1024
+    patients_path="./data/sigir2016/processed/queries.jsonl",
+    output_dir="./run/summaries",
+    prompt_configs=patient_prompts,
+    batch_size=8
 )
 ```
 
@@ -126,7 +180,10 @@ model = EmbeddingModelFactory.create_model(
     model_path="/path/to/bge-large-en-v1.5",
     max_length=512,
     batch_size=32,
-    normalize_embeddings=True
+    device=None,  # Will use CUDA if available
+    use_multi_gpu=False,
+    normalize_embeddings=True,
+    local_rank=-1  # Set to specific rank for distributed training
 )
 
 # Prepare the model (loads weights, moves to device)
@@ -139,17 +196,19 @@ Base interface for all embedding models.
 
 ```python
 # Generate embeddings for a list of texts
-embeddings = model.encode(
+embeddings_dict = model.encode(
     texts=["Patient with stage IV lung cancer", "History of breast cancer"],
+    ids=["patient1", "patient2"],  # Optional IDs, will use indices if not provided
     show_progress=True
 )
 
 # Process a corpus from a JSONL file
 model.encode_corpus(
-    jsonl_path="./data/sigir2016/summaries/trial_condensed.jsonl",
-    output_path="./data/sigir2016/embeddings/trial_embeddings.npy",
+    jsonl_path="./run/summaries/trial_condensed.jsonl",
+    output_path="./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy",
     text_field="summary",
-    id_field="_id"
+    id_field="_id",
+    batch_size=None  # Optional override for batch size
 )
 ```
 
@@ -163,21 +222,29 @@ import numpy as np
 
 # Create an index builder for HNSW index type
 builder = FaissIndexBuilder(
-    index_type="hnsw",
-    metric="cosine",
-    m=64,
-    ef_construction=200
+    index_type="hnsw",  # Options: "flat", "ivf", "hnsw"
+    dimension=None,     # Will be inferred from data
+    metric="cosine",    # Options: "cosine", "l2", "ip"
+    nlist=100,          # For IVF indices: number of centroids
+    m=64,               # For HNSW indices: number of connections per layer
+    ef_construction=200 # For HNSW indices: size of dynamic candidate list
 )
 
 # Build from embeddings dictionary
-embeddings = np.load("./embeddings.npy", allow_pickle=True).item()
+embeddings = np.load("./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy", allow_pickle=True).item()
 builder.build_from_dict(embeddings, normalize=True)
 
+# Build from file directly
+builder.build_from_file(
+    embeddings_file="./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy",
+    normalize=True
+)
+
 # Save the index
-builder.save_index("./faiss_index.index")
+builder.save_index("./run/indices/bge-large-en-v1.5_trials_hnsw.index")
 
 # Load an existing index
-loaded_builder = FaissIndexBuilder.load_index("./faiss_index.index")
+loaded_builder = FaissIndexBuilder.load_index("./run/indices/bge-large-en-v1.5_trials_hnsw.index")
 ```
 
 ### FaissSearcher
@@ -189,22 +256,26 @@ from trialmesh.embeddings.query import FaissSearcher
 import numpy as np
 
 # Create a searcher from an index file
-searcher = FaissSearcher(index_path="./faiss_index.index")
+searcher = FaissSearcher(index_path="./run/indices/bge-large-en-v1.5_trials_hnsw.index")
 
 # Search by vector
-query_vector = np.random.rand(768).astype(np.float32)  # Example vector
-results = searcher.search(query_vector, k=10)
+query_vector = np.random.rand(1024).astype(np.float32)  # Example vector
+results = searcher.search(query_vector, query_id="test_query", k=10, normalize=True)
 
 # Search by ID (using a dictionary of embeddings)
-embeddings = np.load("./embeddings.npy", allow_pickle=True).item()
-results = searcher.search_by_id("patient_123", embeddings, k=10)
+embeddings = np.load("./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy", allow_pickle=True).item()
+results = searcher.search_by_id("patient_123", embeddings, k=10, normalize=True)
 
 # Batch search for multiple queries
 batch_results = searcher.batch_search_by_id(
     query_ids=["patient_1", "patient_2", "patient_3"],
     embeddings=embeddings,
-    k=10
+    k=100,
+    normalize=True
 )
+
+# Convert results to JSON-serializable format
+result_dicts = [result.to_dict() for result in batch_results]
 
 # Access results
 for result in batch_results:
@@ -230,25 +301,35 @@ import json
 llm = LlamaRunner(
     model_path="/path/to/llama-model",
     cache_dir="./cache/matcher",
-    tensor_parallel_size=4
+    tensor_parallel_size=4,
+    max_model_len=16384
 )
 
 # Create the matcher
 matcher = TrialMatcher(
     llm=llm,
-    data_dir="./data",
-    patient_summaries_path="sigir2016/summaries/patient_summaries.jsonl",
-    trials_path="sigir2016/processed_cut/corpus.jsonl",
-    batch_size=8
+    patient_summaries_path="./run/summaries/patient_summary.jsonl",
+    trials_path="./data/sigir2016/processed/corpus.jsonl",
+    batch_size=8,
+    prompt_dir="./prompts"
 )
 
 # Load search results
-with open("./data/sigir2016/results/search_results.json", "r") as f:
+with open("./run/results/bge-large-en-v1.5_hnsw_search_results.json", "r") as f:
     search_results = json.load(f)
 
 # Run the matching pipeline
 match_results = matcher.match(
     search_results=search_results,
+    exclusion_prompt="exclusion_filter_sigir2016",
+    inclusion_prompt="inclusion_filter_sigir2016",
+    scoring_prompt="final_match_scoring_sigir2016",
+    exclusion_max_tokens=2048,
+    inclusion_max_tokens=2048,
+    scoring_max_tokens=4096,
+    exclusion_temperature=0.0,
+    inclusion_temperature=0.0,
+    scoring_temperature=0.1,
     top_k=50,                    # Limit to top 50 trials per patient
     skip_exclusion=False,        # Enable exclusion filtering
     skip_inclusion=False,        # Enable inclusion filtering
@@ -257,7 +338,7 @@ match_results = matcher.match(
 )
 
 # Save the results
-with open("./data/sigir2016/matched/trial_matches.json", "w") as f:
+with open("./run/matched/trial_matches.json", "w") as f:
     json.dump(match_results, f, indent=2)
 ```
 
@@ -272,40 +353,51 @@ Registry of prompt templates for LLM interactions.
 ```python
 from trialmesh.utils.prompt_registry import PromptRegistry
 
-# Create a registry
-registry = PromptRegistry()
+# Create a registry with file-based prompts
+registry = PromptRegistry(prompt_dir="./prompts")
+
+# List available prompts
+available_prompts = registry.list_available_prompts()
+print(f"Available prompts: {available_prompts}")
 
 # Get a prompt pair by name
-prompt_pair = registry.get("patient_summary")
+prompt_pair = registry.get("patient_summary_sigir2016")
 system_prompt = prompt_pair["system"]
 user_prompt = prompt_pair["user"]
 
-# Get individual components
-system_prompt = registry.get_system("trial_condensed")
-user_prompt = registry.get_user("trial_condensed")
-
 # Format a prompt with variables
-formatted_prompt = user_prompt.format(trial_text="This trial studies...")
+formatted_prompt = user_prompt.format(patient_text="This patient has a history of...")
 ```
 
-### Cleaning Utilities
+### PromptConfig
 
-Functions for managing cache and intermediate files.
+Configuration for prompt usage in summarization and matching.
 
 ```python
-from trialmesh.utils.clean_run import clean_directory, resolve_directories
-from pathlib import Path
-import argparse
+from trialmesh.utils.prompt_config import PromptConfig
 
-# Clean a specific directory
-result = clean_directory(Path("./cache/llm_responses"), dry_run=True)
+# Create a configuration for a prompt
+config = PromptConfig(
+    name="trial_condensed_sigir2016",
+    max_tokens=512,
+    output_suffix="condensed",  # Optional, will be derived from name if not provided
+    temperature=0.0
+)
 
-# Resolve directories based on arguments
-args = argparse.Namespace()
-args.data_dir = "./data"
-args.clean_cache = True
-args.model_name = "SapBERT"
-dirs_by_category = resolve_directories(args)
+# The output_suffix will be used for naming output files
+print(f"Output will be saved as: trial_{config.output_suffix}.jsonl")
+```
+
+### CodeMD Utility
+
+Utility for generating code documentation.
+
+```python
+from trialmesh.utils.codemd import generate_codemd
+
+# Generate comprehensive Markdown documentation of the codebase
+generate_codemd()
+# This will create a codecomplete.md file in the project root
 ```
 
 ## Integration Examples
@@ -315,53 +407,87 @@ dirs_by_category = resolve_directories(args)
 ```python
 from trialmesh.llm.llama_runner import LlamaRunner
 from trialmesh.llm.summarizers import Summarizer
+from trialmesh.utils.prompt_config import PromptConfig
 from trialmesh.embeddings.factory import EmbeddingModelFactory
 from trialmesh.embeddings.index_builder import FaissIndexBuilder
 from trialmesh.embeddings.query import FaissSearcher
 from trialmesh.match.matcher import TrialMatcher
 import json
 import os
+import numpy as np
 
 # Define paths
-data_dir = "./data"
-dataset = "sigir2016/processed_cut"
-summaries_dir = os.path.join(data_dir, "sigir2016/summaries")
-embeddings_dir = os.path.join(data_dir, "sigir2016/summaries_embeddings/bge-large-en-v1.5")
-index_path = os.path.join(data_dir, "sigir2016/indices/bge-large-en-v1.5_trials_hnsw.index")
-results_path = os.path.join(data_dir, "sigir2016/results/search_results.json")
-match_output_path = os.path.join(data_dir, "sigir2016/matched/trial_matches.json")
+data_dir = "./data/sigir2016"
+run_dir = "./run"
+cache_dir = "./cache"
+prompt_dir = "./prompts"
+os.makedirs(run_dir, exist_ok=True)
+os.makedirs(os.path.join(run_dir, "summaries"), exist_ok=True)
+os.makedirs(os.path.join(run_dir, "indices"), exist_ok=True)
+os.makedirs(os.path.join(run_dir, "results"), exist_ok=True)
+os.makedirs(os.path.join(run_dir, "matched"), exist_ok=True)
 
 # 1. Initialize LLM
 llm = LlamaRunner(
-    model_path="/path/to/llama-model",
-    cache_dir="./cache/llm_responses",
-    tensor_parallel_size=4
+    model_path="/path/to/Llama-3.3-70B-Instruct-FP8-dynamic",
+    cache_dir=os.path.join(cache_dir, "llm_responses"),
+    tensor_parallel_size=4,
+    max_model_len=16384,
+    max_batch_size=8
 )
 
 # 2. Generate summaries
-summarizer = Summarizer(llm.model_path, cache_dir="./cache/llm_responses")
-summarizer.summarize_trials(
-    trials_path=os.path.join(data_dir, dataset, "corpus.jsonl"),
-    output_dir=summaries_dir,
-    condensed_trial_only=True
+summarizer = Summarizer(
+    model_path=llm.model_path,
+    prompt_dir=prompt_dir,
+    cache_dir=os.path.join(cache_dir, "llm_responses"),
+    tensor_parallel_size=4,
+    max_model_len=16384
 )
+
+# Define prompt configurations
+trial_prompts = [
+    PromptConfig(name="trial_condensed_sigir2016", max_tokens=512)
+]
+
+patient_prompts = [
+    PromptConfig(name="patient_summary_sigir2016", max_tokens=2048),
+    PromptConfig(name="patient_condensed_sigir2016", max_tokens=512)
+]
+
+# Generate summaries
+summarizer.summarize_trials(
+    trials_path=os.path.join(data_dir, "processed/corpus.jsonl"),
+    output_dir=os.path.join(run_dir, "summaries"),
+    prompt_configs=trial_prompts
+)
+
 summarizer.summarize_patients(
-    patients_path=os.path.join(data_dir, dataset, "queries.jsonl"),
-    output_dir=summaries_dir
+    patients_path=os.path.join(data_dir, "processed/queries.jsonl"),
+    output_dir=os.path.join(run_dir, "summaries"),
+    prompt_configs=patient_prompts
 )
 
 # 3. Generate embeddings
 model = EmbeddingModelFactory.create_model(
     model_path="/path/to/bge-large-en-v1.5",
-    batch_size=32,
+    batch_size=128,
     normalize_embeddings=True
 )
+model.prepare_model()
+
+# Create embeddings directory
+embeddings_dir = os.path.join(run_dir, "summaries_embeddings/bge-large-en-v1.5")
+os.makedirs(embeddings_dir, exist_ok=True)
+
+# Generate embeddings
 model.encode_corpus(
-    jsonl_path=os.path.join(summaries_dir, "trial_condensed.jsonl"),
+    jsonl_path=os.path.join(run_dir, "summaries/trial_condensed.jsonl"),
     output_path=os.path.join(embeddings_dir, "trial_embeddings.npy")
 )
+
 model.encode_corpus(
-    jsonl_path=os.path.join(summaries_dir, "patient_condensed.jsonl"),
+    jsonl_path=os.path.join(run_dir, "summaries/patient_condensed.jsonl"),
     output_path=os.path.join(embeddings_dir, "patient_embeddings.npy")
 )
 
@@ -371,18 +497,19 @@ builder.build_from_file(
     embeddings_file=os.path.join(embeddings_dir, "trial_embeddings.npy"),
     normalize=True
 )
+index_path = os.path.join(run_dir, "indices/bge-large-en-v1.5_trials_hnsw.index")
 builder.save_index(index_path)
 
 # 5. Perform search
 searcher = FaissSearcher(index_path=index_path)
-embeddings = model.encode_corpus(
-    jsonl_path=os.path.join(summaries_dir, "patient_condensed.jsonl"),
-    output_path=os.path.join(embeddings_dir, "patient_embeddings.npy")
-)
+patient_embeddings = np.load(os.path.join(embeddings_dir, "patient_embeddings.npy"), allow_pickle=True).item()
+results_path = os.path.join(run_dir, "results/bge-large-en-v1.5_hnsw_search_results.json")
+
 batch_results = searcher.batch_search_by_id(
-    query_ids=list(embeddings.keys()),
-    embeddings=embeddings,
-    k=100
+    query_ids=list(patient_embeddings.keys()),
+    embeddings=patient_embeddings,
+    k=100,
+    normalize=True
 )
 
 # Convert results to JSON format
@@ -393,13 +520,25 @@ with open(results_path, "w") as f:
 # 6. Run trial matcher
 matcher = TrialMatcher(
     llm=llm,
-    data_dir=data_dir,
-    patient_summaries_path="sigir2016/summaries/patient_summaries.jsonl",
-    trials_path=dataset + "/corpus.jsonl"
+    patient_summaries_path=os.path.join(run_dir, "summaries/patient_summary.jsonl"),
+    trials_path=os.path.join(data_dir, "processed/corpus.jsonl"),
+    batch_size=8,
+    prompt_dir=prompt_dir
 )
-match_results = matcher.match(search_results=search_results, top_k=50)
+
+match_results = matcher.match(
+    search_results=search_results,
+    exclusion_prompt="exclusion_filter_sigir2016",
+    inclusion_prompt="inclusion_filter_sigir2016",
+    scoring_prompt="final_match_scoring_sigir2016",
+    exclusion_max_tokens=2048,
+    inclusion_max_tokens=2048,
+    scoring_max_tokens=2048,
+    top_k=50
+)
 
 # Save match results
+match_output_path = os.path.join(run_dir, "matched/trial_matches.json")
 with open(match_output_path, "w") as f:
     json.dump(match_results, f, indent=2)
 ```
@@ -412,14 +551,20 @@ Example of extending TrialMesh with a custom embedding model:
 from trialmesh.embeddings.base import BaseEmbeddingModel
 import torch
 from transformers import AutoModel, AutoTokenizer
+from typing import List
 
 class CustomEmbeddingModel(BaseEmbeddingModel):
     """Custom embedding model implementation."""
     
     def _load_model(self):
         """Load model and tokenizer."""
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        self.model = AutoModel.from_pretrained(self.model_path)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+            self.model = AutoModel.from_pretrained(self.model_path)
+            logging.info(f"Loaded custom model from {self.model_path}")
+        except Exception as e:
+            logging.error(f"Error loading custom model: {str(e)}")
+            raise
         
     def _batch_encode(self, texts: List[str]) -> torch.Tensor:
         """Encode a batch of texts to embeddings."""
@@ -433,8 +578,7 @@ class CustomEmbeddingModel(BaseEmbeddingModel):
         ).to(self.device)
         
         # Generate embeddings
-        with torch.no_grad():
-            outputs = self.model(**inputs)
+        outputs = self.model(**inputs)
             
         # Use CLS token embedding
         embeddings = outputs.last_hidden_state[:, 0]
@@ -450,10 +594,15 @@ from trialmesh.embeddings.models import MODEL_REGISTRY
 MODEL_REGISTRY["custom-model"] = CustomEmbeddingModel
 
 # Use the custom model
+from trialmesh.embeddings.factory import EmbeddingModelFactory
 model = EmbeddingModelFactory.create_model(
     model_type="custom-model",
-    model_path="/path/to/custom/model"
+    model_path="/path/to/custom/model",
+    max_length=512,
+    batch_size=32,
+    normalize_embeddings=True
 )
+model.prepare_model()
 ```
 
 ## Extension Points
@@ -470,26 +619,33 @@ Add new embedding models by:
 
 ### 2. Custom Prompts
 
-Add new prompt templates by:
+Add new prompt templates by creating text files in the prompts directory with the format:
 
-1. Extending the `PromptRegistry` class
-2. Adding new methods that return prompt dictionaries
-3. Using your custom registry with `PromptRunner`
+```
+==== SYSTEM PROMPT ====
+Your system prompt content here.
+
+==== USER PROMPT ====
+Your user prompt content here with {variables} for replacement.
+```
+
+Or programmatically:
 
 ```python
+from trialmesh.utils.prompt_registry import PromptRegistry
+
+# Create a custom registry
 class CustomPromptRegistry(PromptRegistry):
-    def __init__(self):
-        super().__init__()
-        self.prompts.update({
-            "custom_prompt": self._custom_prompt()
-        })
+    def __init__(self, prompt_dir: str = "./prompts"):
+        super().__init__(prompt_dir)
         
-    @staticmethod
-    def _custom_prompt():
-        return {
-            "system": "Custom system prompt",
-            "user": "Custom user prompt with {variable}"
-        }
+        # Add additional prompts programmatically
+        self.prompts.update({
+            "custom_prompt": {
+                "system": "Custom system prompt",
+                "user": "Custom user prompt with {variable}"
+            }
+        })
 ```
 
 ### 3. Custom Matching Logic
@@ -501,10 +657,33 @@ Customize the matching pipeline by:
 3. Implementing your own matching logic while maintaining the same interface
 
 ```python
+from trialmesh.match.matcher import TrialMatcher
+from typing import List, Dict, Tuple, Any, Optional
+
 class CustomMatcher(TrialMatcher):
-    def _apply_scoring(self, patient_summary, trials):
-        # Your custom scoring logic
-        # ...
+    def _apply_scoring(self, patient_summary: str, trials: List[Dict[str, Any]],
+                       max_tokens: Optional[int] = None,
+                       temperature: Optional[float] = None,
+                       prompt_name: str = "final_match_scoring_sigir2016") -> List[Dict[str, Any]]:
+        """Override with custom scoring logic."""
+        # Your custom scoring implementation
+        logging.info("Using custom scoring logic")
+        
+        # Example: simplified scoring that retains the interface
+        scored_trials = []
+        for trial_result in trials:
+            trial_id = trial_result["trial_id"]
+            trial_data = trial_result["trial_data"]
+            
+            # Add a simplified scoring result
+            trial_result["scoring_result"] = {
+                "score": "8",
+                "verdict": "LIKELY MATCH",
+                "reasoning": "Custom matching logic applied"
+            }
+            
+            scored_trials.append(trial_result)
+            
         return scored_trials
 ```
 
