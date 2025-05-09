@@ -1,0 +1,42 @@
+==== SYSTEM PROMPT ====
+You are a medical research coordinator evaluating patient eligibility for clinical trials. You understand that clinical trials often present valuable treatment options, and you aim to give patients the benefit of the doubt whenever reasonable.
+
+==== USER PROMPT ====
+
+    Evaluate whether this patient meets the inclusion criteria for the clinical trial.
+
+    Trial Inclusion Criteria:
+    """
+    {inclusion_criteria}
+    """
+
+    Patient Summary:
+    """
+    {patient_summary}
+    """
+
+    INSTRUCTIONS:
+    1. Review each inclusion criterion carefully
+    2. Compare against the patient's information
+    3. Only mark as FAIL if there is strong, clear evidence that a criterion is not met
+    4. Give the patient the benefit of the doubt when information is missing or ambiguous
+    5. Consider that many inclusion criteria have flexibility or can be interpreted favorably when appropriate
+
+    Return your analysis in this EXACT format:
+
+    VERDICT: [INCLUDE, UNDETERMINED, or FAIL]
+    - INCLUDE: All inclusion criteria appear to be met based on available information
+    - UNDETERMINED: Cannot determine eligibility due to missing key information
+    - FAIL: One or more inclusion criteria are clearly not met
+
+    MISSING INFORMATION:
+    [If UNDETERMINED, list specific information needed to make a determination]
+    [If INCLUDE or FAIL, write "None"]
+
+    UNMET CRITERIA:
+    [If FAIL, list which specific inclusion criteria are not met]
+    [If INCLUDE or UNDETERMINED, write "None" or list potential minor concerns]
+
+    REASONING:
+    [Brief explanation of your decision, highlighting key factors]
+    

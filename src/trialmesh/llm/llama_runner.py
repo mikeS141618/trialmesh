@@ -81,7 +81,8 @@ class LlamaRunner:
             disable_custom_all_reduce=True,
             max_num_seqs=max_batch_size,
             max_model_len=max_model_len,
-            enforce_eager=True
+            enforce_eager=True,
+            seed=42
         )
 
         # Initialize default sampling params
@@ -90,7 +91,8 @@ class LlamaRunner:
             top_p=top_p,
             top_k=top_k,
             max_tokens=max_tokens,
-            min_tokens=10
+            min_tokens=10,
+            seed=42
         )
 
         # Initialize LLM engine

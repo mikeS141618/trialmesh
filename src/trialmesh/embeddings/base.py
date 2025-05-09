@@ -39,7 +39,8 @@ class BaseEmbeddingModel(ABC):
 
     def __init__(self, model_path: str, max_length: int = 512,
                  batch_size: int = 32, device: str = None,
-                 use_multi_gpu: bool = False, normalize_embeddings: bool = True):
+                 use_multi_gpu: bool = False, normalize_embeddings: bool = True,
+                 local_rank: int = -1):
         """Initialize the embedding model.
 
         Args:
@@ -64,11 +65,24 @@ class BaseEmbeddingModel(ABC):
 
         # Initialize distributed setup if needed
         self.is_distributed = False
-        self.local_rank = -1
+        self.local_rank = local_rank  # Use passed local_rank instead of env var
         self.world_size = 1
 
         if use_multi_gpu:
-            if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+            if self.local_rank >= 0:  # If local_rank is provided directly
+                self.is_distributed = True
+                self.world_size = int(os.environ.get("WORLD_SIZE", "1"))
+
+                # Initialize the distributed process group
+                if not dist.is_initialized():
+                    dist.init_process_group(backend="nccl")
+
+                # Update device to local rank
+                self.device = f"cuda:{self.local_rank}"
+                torch.cuda.set_device(self.local_rank)
+
+                logging.info(f"Distributed setup initialized: rank {self.local_rank}/{self.world_size}")
+            elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
                 self.local_rank = int(os.environ["RANK"])
                 self.world_size = int(os.environ["WORLD_SIZE"])
                 self.is_distributed = True
@@ -238,50 +252,124 @@ class BaseEmbeddingModel(ABC):
         output_dir = Path(output_path).parent
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load documents with proper distributed handling
-        texts = []
-        ids = []
-
+        # Get document count first (only on rank 0)
         if not self.is_distributed or self.local_rank == 0:
+            # Count lines in file
+            doc_count = 0
             with open(jsonl_path, 'r', encoding='utf-8') as f:
                 for line in f:
-                    if not line.strip():
-                        continue
+                    if line.strip():
+                        doc_count += 1
 
-                    try:
-                        doc = json.loads(line)
-                        text = doc.get(text_field, "")
-                        doc_id = doc.get(id_field, "")
+            logging.info(f"Found {doc_count} documents to embed")
+        else:
+            doc_count = 0
 
-                        if text and doc_id:
-                            texts.append(text)
-                            ids.append(doc_id)
-                    except json.JSONDecodeError:
-                        logging.warning(f"Error parsing JSON line: {line[:100]}...")
-
-            logging.info(f"Loaded {len(texts)} documents for embedding")
-
-        # Broadcast document count in distributed setting
+        # Broadcast document count to all processes
         if self.is_distributed:
-            if self.local_rank == 0:
-                doc_count = torch.tensor(len(texts), device=self.device)
-            else:
-                doc_count = torch.tensor(0, device=self.device)
+            count_tensor = torch.tensor(doc_count, device=self.device)
+            dist.broadcast(count_tensor, src=0)
+            doc_count = count_tensor.item()
 
-            dist.broadcast(doc_count, src=0)
-
-            # Skip further processing if no documents
-            if doc_count.item() == 0:
+            if doc_count == 0:
                 logging.warning("No documents to process")
                 return
 
-        # Generate embeddings
-        embeddings = self.encode(texts, ids)
+        # Calculate each rank's portion
+        if self.is_distributed:
+            docs_per_rank = doc_count // self.world_size
+            remainder = doc_count % self.world_size
 
-        # Save embeddings
-        if not self.is_distributed or self.local_rank == 0:
-            logging.info(f"Saving {len(embeddings)} embeddings to {output_path}")
+            # Each rank will process a specific range of documents
+            start_idx = self.local_rank * docs_per_rank + min(self.local_rank, remainder)
+            end_idx = start_idx + docs_per_rank + (1 if self.local_rank < remainder else 0)
+
+            logging.info(f"Rank {self.local_rank}: Processing documents {start_idx} to {end_idx - 1}")
+        else:
+            # Non-distributed mode - process all
+            start_idx = 0
+            end_idx = doc_count
+
+        # Each rank loads and processes only its assigned portion
+        texts = []
+        ids = []
+
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                if not line.strip():
+                    continue
+
+                # Skip documents not assigned to this rank
+                if i < start_idx:
+                    continue
+                if i >= end_idx:
+                    break
+
+                try:
+                    doc = json.loads(line)
+                    text = doc.get(text_field, "")
+                    doc_id = doc.get(id_field, "")
+
+                    if text and doc_id:
+                        texts.append(text)
+                        ids.append(doc_id)
+                except json.JSONDecodeError:
+                    logging.warning(f"Error parsing JSON line {i}: {line[:100]}...")
+
+        logging.info(f"Rank {self.local_rank if self.is_distributed else 0}: Loaded {len(texts)} documents")
+
+        # Generate embeddings for this rank's documents
+        embeddings = {}
+        if texts:
+            # Process in batches
+            batch_size = batch_size or self.batch_size
+
+            with torch.no_grad():
+                for i in range(0, len(texts), batch_size):
+                    batch_texts = texts[i:i + batch_size]
+                    batch_ids = ids[i:i + batch_size]
+
+                    # Get embeddings for this batch
+                    batch_embeddings = self._batch_encode(batch_texts)
+
+                    # Store results
+                    for j, doc_id in enumerate(batch_ids):
+                        embeddings[doc_id] = batch_embeddings[j].cpu().numpy()
+
+            logging.info(
+                f"Rank {self.local_rank if self.is_distributed else 0}: Generated {len(embeddings)} embeddings")
+
+        # In distributed mode, gather all embeddings to rank 0
+        if self.is_distributed:
+            # We need to gather information about how many embeddings each rank has
+            num_embeddings = torch.tensor(len(embeddings), device=self.device)
+            all_num_embeddings = [torch.zeros_like(num_embeddings) for _ in range(self.world_size)]
+            dist.all_gather(all_num_embeddings, num_embeddings)
+
+            # Use gather_object to collect all embedding dictionaries
+            all_embeddings = [None] * self.world_size
+            dist.gather_object(embeddings, all_embeddings if self.local_rank == 0 else None, dst=0)
+
+            # Only rank 0 needs to save
+            if self.local_rank == 0:
+                # Combine all dictionaries
+                combined_embeddings = {}
+                for rank, rank_embeddings in enumerate(all_embeddings):
+                    if rank_embeddings is not None:
+                        logging.info(f"Rank 0: Combining {len(rank_embeddings)} embeddings from rank {rank}")
+                        combined_embeddings.update(rank_embeddings)
+
+                # Verify we got all expected embeddings
+                total_expected = sum(n.item() for n in all_num_embeddings)
+                logging.info(f"Rank 0: Expected {total_expected} embeddings, got {len(combined_embeddings)}")
+
+                # Save the combined embeddings
+                np.save(output_path, combined_embeddings)
+                logging.info(f"Rank 0: Saved {len(combined_embeddings)} embeddings to {output_path}")
+        else:
+            # Non-distributed mode - save directly
             np.save(output_path, embeddings)
+            logging.info(f"Saved {len(embeddings)} embeddings to {output_path}")
 
     def _mean_pooling(self, token_embeddings, attention_mask):
         """Mean pooling to create a single embedding vector.

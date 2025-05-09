@@ -26,43 +26,33 @@ class TrialMatcher:
 
     Each stage leverages LLMs to apply clinical judgment similar to how
     trial coordinators would evaluate potential candidates.
-
-    Attributes:
-        data_dir: Base data directory
-        patient_summaries_path: Path to patient summaries
-        trials_path: Path to trial corpus
-        batch_size: Batch size for processing
-        llm: LlamaRunner instance for generating text
-        prompt_runner: PromptRunner for template-based generation
-        patients: Dictionary of loaded patient data
-        trials: Dictionary of loaded trial data
     """
 
     def __init__(
             self,
             llm: LlamaRunner,
-            data_dir: str,
             patient_summaries_path: str,
             trials_path: str,
             batch_size: int = 8,
+            prompt_dir: str = "./prompts",
     ):
         """Initialize the trial matcher.
 
         Args:
             llm: LlamaRunner instance
-            data_dir: Base data directory
-            patient_summaries_path: Path to patient summaries relative to data_dir
-            trials_path: Path to trial corpus relative to data_dir
+            patient_summaries_path: Full path to patient summaries file
+            trials_path: Full path to trial corpus file
             batch_size: Batch size for processing
+            prompt_dir: Directory containing prompt text files
         """
-        self.data_dir = data_dir
-        self.patient_summaries_path = os.path.join(data_dir, patient_summaries_path)
-        self.trials_path = os.path.join(data_dir, trials_path)
+        self.patient_summaries_path = patient_summaries_path
+        self.trials_path = trials_path
         self.batch_size = batch_size
 
-        # Initialize LLM components
+        # Initialize LLM components with file-based prompts
         self.llm = llm
-        self.prompt_runner = PromptRunner(llm)
+        self.prompt_registry = PromptRegistry(prompt_dir)
+        self.prompt_runner = PromptRunner(llm, self.prompt_registry)
 
         # Load data
         self.patients = self._load_patients()
@@ -71,11 +61,7 @@ class TrialMatcher:
         logging.info(f"Loaded {len(self.patients)} patients and {len(self.trials)} trials")
 
     def _load_patients(self) -> Dict[str, Dict[str, Any]]:
-        """Load patient summaries.
-
-        Returns:
-            Dictionary mapping patient IDs to their data
-        """
+        """Load patient summaries."""
         patients = {}
         with open(self.patient_summaries_path, 'r') as f:
             for line in f:
@@ -93,11 +79,7 @@ class TrialMatcher:
         return patients
 
     def _load_trials(self) -> Dict[str, Dict[str, Any]]:
-        """Load trial data.
-
-        Returns:
-            Dictionary mapping trial IDs to their data
-        """
+        """Load trial data."""
         trials = {}
         with open(self.trials_path, 'r') as f:
             for line in f:
@@ -115,14 +97,7 @@ class TrialMatcher:
         return trials
 
     def _format_trial(self, trial: Dict[str, Any]) -> str:
-        """Format trial data for LLM input.
-
-        Args:
-            trial: Dictionary containing trial data
-
-        Returns:
-            Formatted string representation of the trial
-        """
+        """Format trial data for LLM input."""
         metadata = trial.get("metadata", {})
 
         formatted_text = f"Title: {trial.get('title', '')}\n\n"
@@ -152,26 +127,26 @@ class TrialMatcher:
 
         return formatted_text.strip()
 
-    def match(self, search_results: List[Dict[str, Any]], top_k: Optional[int] = None,
-              skip_exclusion: bool = False, skip_inclusion: bool = False,
-              skip_scoring: bool = False, include_all_trials: bool = False) -> List[Dict[str, Any]]:
-        """Run the matching pipeline.
-
-        This is the main entry point for the matching process. It orchestrates
-        the multi-stage filtering pipeline for each patient-trial pair.
-
-        Args:
-            search_results: List of search results from FAISS search
-            top_k: Number of trials to process per patient (None for all trials)
-            skip_exclusion: Skip exclusion filtering step
-            skip_inclusion: Skip inclusion filtering step
-            skip_scoring: Skip final scoring step
-            include_all_trials: Include all trials in output, even those filtered out
-
-        Returns:
-            List of patient-trial matches with evaluation results
-        """
+    def match(self, search_results: List[Dict[str, Any]],
+              exclusion_prompt: str = "exclusion_filter_sigir2016",
+              inclusion_prompt: str = "inclusion_filter_sigir2016",
+              scoring_prompt: str = "final_match_scoring_sigir2016",
+              exclusion_max_tokens: Optional[int] = None,
+              inclusion_max_tokens: Optional[int] = None,
+              scoring_max_tokens: Optional[int] = None,
+              exclusion_temperature: Optional[float] = None,
+              inclusion_temperature: Optional[float] = None,
+              scoring_temperature: Optional[float] = None,
+              top_k: Optional[int] = None,
+              skip_exclusion: bool = False,
+              skip_inclusion: bool = False,
+              skip_scoring: bool = False,
+              include_all_trials: bool = False) -> List[Dict[str, Any]]:
+        """Run the matching pipeline."""
         logging.info("Starting trial matching process")
+        logging.info(f"Using exclusion prompt: {exclusion_prompt}")
+        logging.info(f"Using inclusion prompt: {inclusion_prompt}")
+        logging.info(f"Using scoring prompt: {scoring_prompt}")
 
         # Process patients in order
         all_patient_results = []
@@ -220,6 +195,9 @@ class TrialMatcher:
                 filtered_trials, excluded_trials = self._apply_exclusion_filter(
                     patient_summary,
                     valid_trials,
+                    prompt_name=exclusion_prompt,
+                    max_tokens=exclusion_max_tokens,
+                    temperature=exclusion_temperature,
                     return_excluded=include_all_trials
                 )
 
@@ -245,6 +223,9 @@ class TrialMatcher:
                 inclusion_results, failed_inclusion = self._apply_inclusion_filter(
                     patient_summary,
                     filtered_trials,
+                    prompt_name=inclusion_prompt,
+                    max_tokens=inclusion_max_tokens,
+                    temperature=inclusion_temperature,
                     return_failed=include_all_trials
                 )
 
@@ -268,7 +249,13 @@ class TrialMatcher:
 
             # 3. Final Scoring (for trials that didn't fail inclusion)
             if not skip_scoring:
-                final_results = self._apply_scoring(patient_summary, inclusion_results)
+                final_results = self._apply_scoring(
+                    patient_summary,
+                    inclusion_results,
+                    prompt_name=scoring_prompt,
+                    max_tokens=scoring_max_tokens,
+                    temperature=scoring_temperature
+                )
 
                 # Update tracked results with scores
                 if include_all_trials:
@@ -279,7 +266,7 @@ class TrialMatcher:
                 final_results = []
                 for trial_result in inclusion_results:
                     trial_result["scoring_result"] = {
-                        "score": "50",
+                        "score": "5",
                         "verdict": "POSSIBLE MATCH",
                         "reasoning": "Scoring skipped"
                     }
@@ -325,25 +312,27 @@ class TrialMatcher:
         return all_patient_results
 
     def _apply_exclusion_filter(self, patient_summary: str, trials: List[Tuple[str, Dict[str, Any]]],
-                                return_excluded: bool = False) -> Union[List[Dict[str, Any]],
-    Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
+                                prompt_name: str = "exclusion_filter_sigir2016",
+                                max_tokens: Optional[int] = None,
+                                temperature: Optional[float] = None,
+                                return_excluded: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Apply exclusion filter to trials.
-
-        This filter identifies trials that explicitly exclude the patient based
-        on exclusion criteria, filtering out obvious mismatches early in the pipeline.
 
         Args:
             patient_summary: Patient summary text
             trials: List of (trial_id, trial_data) tuples
+            prompt_name: Name of the prompt to use for exclusion filtering
             return_excluded: Whether to return excluded trials
 
         Returns:
-            If return_excluded is False:
-                List of dictionaries with trial data and exclusion results for trials that passed
-            If return_excluded is True:
-                Tuple of (passed_trials, excluded_trials)
+            Tuple of (passed_trials, excluded_trials), where excluded_trials is empty if return_excluded is False
         """
-        logging.info(f"Running exclusion filter on {len(trials)} trials")
+        logging.info(f"Running exclusion filter on {len(trials)} trials with prompt {prompt_name}")
+
+        # Check if prompt exists
+        if not self.prompt_registry.get(prompt_name).get("user"):
+            logging.error(f"Exclusion prompt {prompt_name} not found")
+            raise ValueError(f"Exclusion prompt {prompt_name} not found in registry")
 
         # Pre-filter trials with empty exclusion criteria
         trials_with_criteria = []
@@ -366,9 +355,8 @@ class TrialMatcher:
 
         # If no trials have exclusion criteria, return early
         if not trials_with_criteria:
-            if return_excluded:
-                return auto_passed_trials, []
-            return auto_passed_trials
+            # Always return a tuple, with empty list as second value if not return_excluded
+            return auto_passed_trials, []
 
         # Prepare batches for trials that have exclusion criteria
         batches = [trials_with_criteria[i:i + self.batch_size]
@@ -394,8 +382,10 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="exclusion_filter_sigir2016",
-                variables_list=variables_list
+                prompt_name=prompt_name,
+                variables_list=variables_list,
+                max_tokens=max_tokens,
+                temperature=temperature
             )
 
             # Process responses
@@ -431,30 +421,28 @@ class TrialMatcher:
 
         logging.info(f"Exclusion filter passed {len(passed_trials)} of {len(trials)} trials")
 
-        if return_excluded:
-            return passed_trials, excluded_trials
-        return passed_trials
+        # Always return a tuple with both values
+        return passed_trials, excluded_trials
 
     def _apply_inclusion_filter(self, patient_summary: str, trials: List[Dict[str, Any]],
-                                return_failed: bool = False) -> Union[List[Dict[str, Any]],
-    Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
+                                prompt_name: str = "inclusion_filter_sigir2016",
+                                max_tokens: Optional[int] = None,
+                                temperature: Optional[float] = None,
+                                return_failed: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Apply inclusion filter to trials that passed exclusion.
-
-        This filter analyzes whether patients meet the core inclusion criteria
-        for each trial, or if there's insufficient information to determine eligibility.
 
         Args:
             patient_summary: Patient summary text
             trials: List of dictionaries with trial data and exclusion results
+            prompt_name: Name of the prompt to use for inclusion filtering
             return_failed: Whether to return trials that failed inclusion
-
-        Returns:
-            If return_failed is False:
-                List of dictionaries with trial data, exclusion and inclusion results
-            If return_failed is True:
-                Tuple of (included_trials, failed_trials)
         """
-        logging.info(f"Running inclusion filter on {len(trials)} trials")
+        logging.info(f"Running inclusion filter on {len(trials)} trials with prompt {prompt_name}")
+
+        # Check if prompt exists
+        if not self.prompt_registry.get(prompt_name).get("user"):
+            logging.error(f"Inclusion prompt {prompt_name} not found")
+            raise ValueError(f"Inclusion prompt {prompt_name} not found in registry")
 
         # Pre-filter trials with empty inclusion criteria
         trials_with_criteria = []
@@ -510,8 +498,10 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="inclusion_filter_sigir2016",
-                variables_list=variables_list
+                prompt_name=prompt_name,
+                variables_list=variables_list,
+                max_tokens=max_tokens,
+                temperature=temperature
             )
 
             # Process responses
@@ -535,7 +525,7 @@ class TrialMatcher:
 
                 # Handle unparsable verdicts
                 if verdict == "UNPARSABLE_VERDICT":
-                    logging.warning(f"Could not parse verdict for trial {trial_result['trial_id']} in exclusion filter")
+                    logging.warning(f"Could not parse verdict for trial {trial_result['trial_id']} in inclusion filter")
                     logging.debug(f"Response fragment: {response.text[:200]}...")
 
                 # Add inclusion result to trial data
@@ -556,22 +546,25 @@ class TrialMatcher:
 
         if return_failed:
             return included_trials, failed_trials
-        return included_trials
+        return included_trials, []  # Return empty list as second value
 
-    def _apply_scoring(self, patient_summary: str, trials: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _apply_scoring(self, patient_summary: str, trials: List[Dict[str, Any]],
+                       max_tokens: Optional[int] = None,
+                       temperature: Optional[float] = None,
+                       prompt_name: str = "final_match_scoring_sigir2016") -> List[Dict[str, Any]]:
         """Apply final scoring to trials that passed inclusion filter.
-
-        This stage performs detailed clinical assessment of each trial-patient pair,
-        providing a numerical score and detailed reasoning about the match quality.
 
         Args:
             patient_summary: Patient summary text
             trials: List of dictionaries with trial data, exclusion and inclusion results
-
-        Returns:
-            List of dictionaries with trial data and all evaluation results
+            prompt_name: Name of the prompt to use for final scoring
         """
-        logging.info(f"Running final scoring on {len(trials)} trials")
+        logging.info(f"Running final scoring on {len(trials)} trials with prompt {prompt_name}")
+
+        # Check if prompt exists
+        if not self.prompt_registry.get(prompt_name).get("user"):
+            logging.error(f"Scoring prompt {prompt_name} not found")
+            raise ValueError(f"Scoring prompt {prompt_name} not found in registry")
 
         # Prepare batches for processing
         batches = [trials[i:i + self.batch_size] for i in range(0, len(trials), self.batch_size)]
@@ -615,8 +608,10 @@ class TrialMatcher:
 
             # Run LLM for the batch
             responses = self.prompt_runner.run_prompt_batch(
-                prompt_name="final_match_scoring_sigir2016",
-                variables_list=variables_list
+                prompt_name=prompt_name,
+                variables_list=variables_list,
+                max_tokens=max_tokens,
+                temperature=temperature
             )
 
             # Process responses

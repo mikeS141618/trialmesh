@@ -59,11 +59,13 @@ def parse_args():
 
     # Base directories
     parser.add_argument("--data-dir", type=str, default="./data",
-                        help="Base directory containing datasets (default: ./data)")
+                        help="Base directory containing source datasets (default: ./data)")
+    parser.add_argument("--run-dir", type=str, default="./run",
+                        help="Directory for storing pipeline outputs (default: ./run)")
     parser.add_argument("--models-dir", type=str, default=None,
                         help="Directory containing embedding model weights; will be auto-detected if not specified")
-    parser.add_argument("--dataset", type=str, default="sigir2016/summaries",
-                        help="Dataset subdirectory under data-dir containing documents to process (default: sigir2016/summaries)")
+    parser.add_argument("--dataset", type=str, default="summaries",
+                        help="Dataset subdirectory under data-dir containing documents to process (default: summaries)")
 
     # Model selection
     parser.add_argument("--models", type=str, nargs="+", default=None,
@@ -119,13 +121,13 @@ def parse_args():
             parser.error("Could not infer models directory. Please specify --models-dir.")
 
     # Create output directories
-    os.makedirs(os.path.join(args.data_dir, "sigir2016", "indices"), exist_ok=True)
-    os.makedirs(os.path.join(args.data_dir, "sigir2016", "results"), exist_ok=True)
+    os.makedirs(os.path.join(args.run_dir, "indices"), exist_ok=True)
+    os.makedirs(os.path.join(args.run_dir, "results"), exist_ok=True)
 
     return args
 
 
-def run_embedding(model_name: str, model_path: str, data_dir: str,
+def run_embedding(model_name: str, model_path: str, data_dir: str, run_dir: str,
                   dataset: str, batch_size: int) -> bool:
     """Run embedding generation for a single model.
 
@@ -136,6 +138,7 @@ def run_embedding(model_name: str, model_path: str, data_dir: str,
         model_name: Name of the embedding model
         model_path: Path to the model
         data_dir: Base data directory
+        run_dir: experiment directory
         dataset: Dataset to process
         batch_size: Batch size for processing
 
@@ -150,7 +153,8 @@ def run_embedding(model_name: str, model_path: str, data_dir: str,
         "--batch-size", str(batch_size),
         "--normalize",
         "--data-dir", data_dir,
-        "--dataset", dataset
+        "--dataset", dataset,
+        "--output-dir", os.path.join(run_dir, f"{dataset}_embeddings", model_name)
     ]
 
     try:
@@ -184,7 +188,7 @@ def run_embedding(model_name: str, model_path: str, data_dir: str,
         return False
 
 
-def build_index(model_name: str, data_dir: str, dataset: str,
+def build_index(model_name: str, run_dir: str, dataset: str,
                 index_type: str, m_value: int = DEFAULT_M_VALUE,
                 ef_construction: int = DEFAULT_EF_CONSTRUCTION) -> bool:
     """Build FAISS index for a model.
@@ -194,7 +198,7 @@ def build_index(model_name: str, data_dir: str, dataset: str,
 
     Args:
         model_name: Name of the embedding model
-        data_dir: Base data directory
+        run_dir: experiment directory
         dataset: Dataset to process
         index_type: Type of FAISS index to build (flat, hnsw)
         m_value: Number of connections per layer for HNSW index
@@ -206,9 +210,9 @@ def build_index(model_name: str, data_dir: str, dataset: str,
     logging.info(f"Building {index_type} index for {model_name}...")
 
     # Set paths
-    embeddings_dir = os.path.join(data_dir, f"{dataset}_embeddings", model_name)
+    embeddings_dir = os.path.join(run_dir, f"{dataset}_embeddings", model_name)
     trial_embeddings = os.path.join(embeddings_dir, "trial_embeddings.npy")
-    index_file = os.path.join(data_dir, "sigir2016", "indices", f"{model_name}_trials_{index_type}.index")
+    index_file = os.path.join(run_dir, "indices", f"{model_name}_trials_{index_type}.index")
 
     # Build the command based on index type
     cmd = [
@@ -255,7 +259,7 @@ def build_index(model_name: str, data_dir: str, dataset: str,
         return False
 
 
-def run_search(model_name: str, data_dir: str, dataset: str,
+def run_search(model_name: str, run_dir: str, dataset: str,
                index_type: str, k_value: int = DEFAULT_K_VALUE) -> bool:
     """Run vector search for a model.
 
@@ -264,7 +268,7 @@ def run_search(model_name: str, data_dir: str, dataset: str,
 
     Args:
         model_name: Name of the embedding model
-        data_dir: Base data directory
+        run_dir: experiment directory
         dataset: Dataset to process
         index_type: Type of FAISS index to use (flat, hnsw)
         k_value: Number of results to return per query
@@ -274,11 +278,11 @@ def run_search(model_name: str, data_dir: str, dataset: str,
     """
     logging.info(f"Running search for {model_name} using {index_type} index...")
 
-    # Set paths
-    embeddings_dir = os.path.join(data_dir, f"{dataset}_embeddings", model_name)
+    # Set paths to use run_dir
+    embeddings_dir = os.path.join(run_dir, f"{dataset}_embeddings", model_name)
     patient_embeddings = os.path.join(embeddings_dir, "patient_embeddings.npy")
-    index_file = os.path.join(data_dir, "sigir2016", "indices", f"{model_name}_trials_{index_type}.index")
-    results_file = os.path.join(data_dir, "sigir2016", "results", f"{model_name}_{index_type}_search_results.json")
+    index_file = os.path.join(run_dir, "indices", f"{model_name}_trials_{index_type}.index")
+    results_file = os.path.join(run_dir, "results", f"{model_name}_{index_type}_search_results.json")
 
     cmd = [
         "trialmesh-index", "search",
@@ -349,7 +353,7 @@ def run_pipeline(args):
 
         # 1. Generate embeddings (if not skipped)
         if not args.skip_embeddings:
-            if not run_embedding(model_name, model_path, args.data_dir, args.dataset, batch_size):
+            if not run_embedding(model_name, model_path, args.data_dir, args.run_dir, args.dataset, batch_size):
                 logging.error(f"Skipping {model_name} due to embedding generation failure")
                 failed_models.append(model_name)
                 continue
@@ -358,7 +362,7 @@ def run_pipeline(args):
         if not args.skip_indexing:
             if not build_index(
                     model_name,
-                    args.data_dir,
+                    args.run_dir,
                     args.dataset,
                     args.index_type,
                     args.m_value,
@@ -372,7 +376,7 @@ def run_pipeline(args):
         if not args.skip_search:
             if not run_search(
                     model_name,
-                    args.data_dir,
+                    args.run_dir,
                     args.dataset,
                     args.index_type,
                     args.k_value
@@ -398,7 +402,7 @@ def run_pipeline(args):
         logging.warning(f"Failed models ({len(failed_models)}): {', '.join(failed_models)}")
 
     logging.info("Results available in:")
-    logging.info(f"{args.data_dir}/sigir2016/results/")
+    logging.info(f"{args.run_dir}/results/")
 
 
 def main():

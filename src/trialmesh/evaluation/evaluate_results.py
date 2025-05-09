@@ -37,16 +37,18 @@ def setup_logging(log_level: str = "INFO"):
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Evaluate search results against SIGIR2016 gold standard"
+        description="Evaluate search results against gold standard"
     )
 
     # Data directories
     parser.add_argument("--data-dir", type=str, default="./data",
-                        help="Base directory containing datasets (default: ./data)")
-    parser.add_argument("--dataset", type=str, default="sigir2016/processed_cut",
-                        help="Dataset path containing gold standard data (default: sigir2016/processed_cut)")
+                        help="Base directory containing source datasets (default: ./data)")
+    parser.add_argument("--run-dir", type=str, default="./run",
+                        help="Directory for storing pipeline outputs (default: ./run)")
+    parser.add_argument("--dataset", type=str, default="processed",
+                        help="Dataset path containing gold standard data (default: processed)")
     parser.add_argument("--results-dir", type=str, default=None,
-                        help="Directory containing search results to evaluate; defaults to {data-dir}/sigir2016/results")
+                        help="Directory containing search results to evaluate; defaults to {run-dir}/results")
 
     # Models to evaluate
     parser.add_argument("--models", type=str, nargs="+", default=None,
@@ -58,7 +60,7 @@ def parse_args():
 
     # Output options
     parser.add_argument("--output-file", type=str, default=None,
-                        help="Save evaluation metrics to CSV file for further analysis")
+                        help="Save evaluation metrics to CSV file for further analysis; saved to {run-dir}/evaluation/ if path is relative")
     parser.add_argument("--visualize", action="store_true",
                         help="Generate comparison plots of model performance")
 
@@ -70,7 +72,15 @@ def parse_args():
 
     # Set default results directory if not specified
     if args.results_dir is None:
-        args.results_dir = os.path.join(args.data_dir, "sigir2016", "results")
+        args.results_dir = os.path.join(args.run_dir, "results")
+
+    # Add evaluation directory to run_dir
+    if args.output_file:
+        # If not an absolute path, make it relative to run_dir/evaluation
+        if not os.path.isabs(args.output_file):
+            args.output_file = os.path.join(args.run_dir, "evaluation", args.output_file)
+            # Ensure the evaluation directory exists
+            os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
     return args
 

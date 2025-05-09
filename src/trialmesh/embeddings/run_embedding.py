@@ -38,6 +38,8 @@ def parse_args():
                         help="Batch size for embedding generation; adjust based on GPU memory (default: 32)")
     parser.add_argument("--normalize", action="store_true",
                         help="L2-normalize output embeddings; recommended for cosine similarity search")
+    parser.add_argument("--local-rank", type=int, default=-1,
+                        help="Local rank for distributed training (passed by PyTorch launchers)")
 
     # GPU configuration
     parser.add_argument("--device", type=str, default=None,
@@ -46,12 +48,12 @@ def parse_args():
                         help="Use distributed processing across multiple GPUs using torch.distributed")
 
     # Input/output options
-    parser.add_argument("--data-dir", type=str, default="./data",
-                        help="Base directory containing datasets (default: ./data)")
-    parser.add_argument("--dataset", type=str, default="sigir2016/processed_cut_summaries",
-                        help="Dataset subdirectory under data-dir containing documents to embed (default: sigir2016/processed_cut_summaries)")
+    parser.add_argument("--data-dir", type=str, default="./run",
+                        help="Base directory containing  trialmesh-summarize (default: ./run)")
+    parser.add_argument("--dataset", type=str, default="processed_summaries",
+                        help="Dataset subdirectory under data-dir containing documents to embed (default: processed_summaries)")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="Directory for saving embeddings; defaults to {data-dir}/{dataset}_embeddings/{model-type}")
+                        help="Directory for saving embeddings; defaults to ./run/{dataset}_embeddings/{model-name}")
 
     # Processing options
     parser.add_argument("--skip-trials", action="store_true",
@@ -66,7 +68,7 @@ def parse_args():
     # Set default output directory if not specified
     if args.output_dir is None:
         model_name = os.path.basename(args.model_path.rstrip("/"))
-        args.output_dir = os.path.join(args.data_dir, f"{args.dataset}_embeddings", model_name)
+        args.output_dir = os.path.join("./run", f"{args.dataset}_embeddings", model_name)
 
     return args
 
@@ -98,6 +100,7 @@ def main():
         device=args.device,
         use_multi_gpu=args.multi_gpu,
         normalize_embeddings=args.normalize,
+        local_rank=args.local_rank,
     )
 
     # Generate embeddings for trials

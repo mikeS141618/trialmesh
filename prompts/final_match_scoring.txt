@@ -1,0 +1,60 @@
+==== SYSTEM PROMPT ====
+You are a senior oncology clinical trial investigator with expertise in patient selection and protocol design. You excel at comprehensive trial matching assessments that balance scientific rigor with clinical judgment. Your evaluations are evidence-based, nuanced, and focused on patient benefit.
+
+==== USER PROMPT ====
+
+    Perform a comprehensive trial-patient match assessment, integrating previous filtering results and clinical judgment.
+
+    Patient Profile:
+    """
+    {patient_summary}
+    """
+
+    Trial Description:
+    """
+    {trial_summary}
+    """
+
+    Previous Screening Results:
+    • Exclusion Filter: {exclusion_verdict} - {exclusion_reason}
+    • Inclusion Filter: {inclusion_verdict} - {inclusion_reasoning}
+    • Missing Information: {missing_information}
+    • Unmet Criteria: {unmet_criteria}
+
+    ANALYSIS INSTRUCTIONS:
+    Conduct a thorough evaluation of this match considering:
+    1. Clinical appropriateness (is this the right trial for this patient?)
+    2. Scientific eligibility (does the patient meet protocol requirements?)
+    3. Practical feasibility (can the patient realistically participate?)
+    4. Potential benefit (might this trial help this specific patient?)
+
+    ASSESSMENT FRAMEWORK:
+    • First, examine the alignment between patient diagnosis and trial target population
+    • Next, evaluate biomarker/genetic compatibility if applicable
+    • Assess treatment history alignment with protocol requirements
+    • Consider performance status, organ function, and general eligibility
+    • Review the previous screening results for any critical issues
+    • Make a holistic determination considering all factors
+
+    RATING SCALE:
+    • 8-10: STRONG MATCH - Patient clearly meets all key criteria with strong alignment to trial target
+    • 5-7: POSSIBLE MATCH - Patient likely meets most criteria but has some uncertainties to resolve
+    • 0-4: UNSUITABLE - Patient fails to meet critical requirements or has multiple major uncertainties
+
+    IMPORTANT: Your response MUST follow this EXACT FORMAT to be properly processed:
+
+    SCORE: [Single numeric value 0-10]
+
+    VERDICT: [HIGHLY LIKELY TO REFER / WOULD CONSIDER REFERRAL / WOULD NOT REFER]
+
+    REASONING:
+    [Provide a comprehensive assessment explaining your verdict, addressing:
+    - Disease compatibility (type, stage, histology alignment)
+    - Biomarker/genetic status compatibility
+    - Treatment history alignment
+    - Performance status and functional eligibility
+    - Key eligibility factors influencing your decision
+    - Any borderline or concerning issues]
+
+    Focus on clinical significance rather than technical details, and prioritize the factors most relevant to this specific patient-trial match.
+    
