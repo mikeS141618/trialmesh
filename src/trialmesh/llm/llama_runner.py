@@ -172,7 +172,7 @@ class LlamaRunner:
         logging.debug(f"Cached response for key: {cache_key}")
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None,
-                max_tokens: Optional[int] = None, temperature: Optional[float] = None) -> LlamaResponse:
+                 max_tokens: Optional[int] = None, temperature: Optional[float] = None) -> LlamaResponse:
         """Generate text from a prompt with optional system prompt.
 
         This method handles the core generation functionality, including:
