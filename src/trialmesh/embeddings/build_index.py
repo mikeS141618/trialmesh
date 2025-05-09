@@ -44,7 +44,7 @@ def parse_args():
     build_parser.add_argument("--embeddings", type=str, required=True,
                               help="Path to .npy file containing embeddings dictionary")
     build_parser.add_argument("--output", type=str, required=True,
-                              help="Destination path for saving the FAISS index")
+                              help="Destination path for saving the FAISS index (recommended: ./run/indices/{model_name}_{index_type}.index)")
     build_parser.add_argument("--index-type", type=str, default="hnsw", choices=["flat", "ivf", "hnsw"],
                               help="FAISS index type: flat (exact, slowest), ivf (approximate, balanced), hnsw (fast, accurate) (default: flat)")
     build_parser.add_argument("--metric", type=str, default="cosine", choices=["cosine", "l2", "ip"],
@@ -67,7 +67,7 @@ def parse_args():
     search_parser.add_argument("--queries", type=str, required=True,
                                help="Path to .npy file containing query embeddings dictionary")
     search_parser.add_argument("--output", type=str, required=True,
-                               help="Destination path for saving search results in JSON format")
+                               help="Destination path for saving search results in JSON format (recommended: ./run/results/{model_name}_{index_type}_search_results.json)")
     search_parser.add_argument("--k", type=int, default=100,
                                help="Number of nearest neighbors to retrieve per query (default: 100)")
     search_parser.add_argument("--query-ids", type=str, default=None, nargs="+",

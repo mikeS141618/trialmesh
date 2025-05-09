@@ -65,7 +65,8 @@ trialmesh-download-models --list        # List available models
 # Generate LLM summaries for patients and trials
 trialmesh-summarize --model-path /path/to/llama-model \
   --data-dir ./data \
-  --dataset sigir2016/processed_cut \
+  --dataset processed \
+  --output-dir ./run/summaries \
   --cache-dir ./cache/llm_responses
 ```
 
@@ -77,8 +78,8 @@ trialmesh-embed \
   --model-path /path/to/SapBERT \
   --batch-size 32 \
   --normalize \
-  --data-dir ./data \
-  --dataset sigir2016/summaries
+  --data-dir ./run \
+  --dataset summaries
 ```
 
 ### FAISS Index Building and Search
@@ -86,16 +87,16 @@ trialmesh-embed \
 ```bash
 # Build a FAISS HNSW index (fast search)
 trialmesh-index build \
-  --embeddings ./data/sigir2016/summaries_embeddings/SapBERT/trial_embeddings.npy \
-  --output ./data/sigir2016/indices/SapBERT_trials_hnsw.index \
+  --embeddings ./run/summaries_embeddings/SapBERT/trial_embeddings.npy \
+  --output ./run/indices/SapBERT_trials_hnsw.index \
   --index-type hnsw \
   --m 64
 
 # Search for trials matching patients
 trialmesh-index search \
-  --index ./data/sigir2016/indices/SapBERT_trials_hnsw.index \
-  --queries ./data/sigir2016/summaries_embeddings/SapBERT/patient_embeddings.npy \
-  --output ./data/sigir2016/results/SapBERT_search_results.json \
+  --index ./run/indices/SapBERT_trials_hnsw.index \
+  --queries ./run/summaries_embeddings/SapBERT/patient_embeddings.npy \
+  --output ./run/results/SapBERT_search_results.json \
   --k 100
 ```
 
@@ -103,45 +104,40 @@ trialmesh-index search \
 
 ```bash
 # Run the complete retrieval pipeline (embedding, indexing, search) for all models
-trialmesh-retrieval
+trialmesh-retrieval --run-dir ./run
 
 # Run with specific models
-trialmesh-retrieval --models SapBERT bge-large-v1.5
+trialmesh-retrieval --models SapBERT bge-large-v1.5 --run-dir ./run
 
 # Run with HNSW index type
-trialmesh-retrieval --index-type hnsw --m-value 96 --ef-construction 300
+trialmesh-retrieval --index-type hnsw --m-value 96 --ef-construction 300 --run-dir ./run
 
 # Skip certain stages
-trialmesh-retrieval --skip-embeddings --skip-indexing
+trialmesh-retrieval --skip-embeddings --skip-indexing --run-dir ./run
 ```
 
 ### Evaluation
 
 ```bash
 # Evaluate all model search results
-trialmesh-evaluate
+trialmesh-evaluate --data-dir ./data --run-dir ./run
 
 # Evaluate specific models with visualization
-trialmesh-evaluate --models SapBERT bge-large-v1.5 --visualize
+trialmesh-evaluate --models SapBERT bge-large-v1.5 --visualize --run-dir ./run
 
 # Evaluate only models using HNSW indices and save results
-trialmesh-evaluate --index-type hnsw --output-file ./evaluation/hnsw_results.csv
+trialmesh-evaluate --index-type hnsw --output-file evaluation_results.csv --run-dir ./run
 ```
 
-### Maintenance
+### Matching
 
 ```bash
-# Clean cached responses and outputs (with options for different types)
-trialmesh-clean --clean-all
-
-# Clean only embeddings for a specific model
-trialmesh-clean --clean-embeddings --model-name SapBERT
-
-# Preview what would be cleaned without removing anything
-trialmesh-clean --clean-all --dry-run
-
-# Generate code documentation
-trialmesh-codemd
+# Run detailed matching analysis with LLM reasoning
+trialmesh-match --model-path /path/to/llama-model \
+  --data-dir ./data \
+  --run-dir ./run \
+  --search-results results/bge-large-en-v1.5_hnsw_search_results.json \
+  --tensor-parallel-size 4
 ```
 
 ## Complete End-to-End Pipeline
@@ -150,14 +146,13 @@ TrialMesh provides a complete pipeline for clinical trial matching. The followin
 
 ```bash
 {
-  clear &&
-  trialmesh-clean --clean-all --force &&
-  trialmesh-summarize --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data --dataset sigir2016/processed_cut --output-dir ./data/sigir2016/summaries --cache-dir ./cache/llm_responses --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=33 --condensed-trial-only &&
-  trialmesh-embed --model-path /path/to/bge-large-en-v1.5 --batch-size 256 --normalize --data-dir ./data --dataset sigir2016/summaries &&
-  trialmesh-index build --embeddings ./data/sigir2016/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy --output ./data/sigir2016/indices/bge-large-en-v1.5_trials_hnsw.index --index-type hnsw --m 96 --ef-construction 256 &&
-  trialmesh-index search --index ./data/sigir2016/indices/bge-large-en-v1.5_trials_hnsw.index --queries ./data/sigir2016/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./data/sigir2016/results/bge-large-en-v1.5_hnsw_search_results.json --k 33 &&
-  trialmesh-evaluate &&
-  trialmesh-match --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=33 --include-all-trials
+  clear && rm -rv run/ &&
+  trialmesh-summarize --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --dataset processed --cache-dir ./cache/llm_responses --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --condensed-trial-only --output-dir ./run/summaries &&
+  trialmesh-embed --model-path ../../models/bge-large-en-v1.5 --batch-size 256 --normalize --data-dir ./run --dataset summaries &&
+  trialmesh-index build --embeddings ./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy --output ./run/indices/bge-large-en-v1.5_trials_flat.index --index-type flat --m 128 --ef-construction 512 &&
+  trialmesh-index search --index ./run/indices/bge-large-en-v1.5_trials_flat.index --queries ./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./run/results/bge-large-en-v1.5_flat_search_results.json --k 6 &&
+  trialmesh-evaluate --data-dir ./data/sigir2016 --dataset processed &&
+  trialmesh-match --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --include-all-trials --search-results results/bge-large-en-v1.5_flat_search_results.json
 } |& tee trialmesh_run_$(date +%Y%m%d_%H%M%S).log
 ```
 
@@ -165,7 +160,7 @@ For more details on the pipeline architecture and implementation, see the [Pipel
 
 ## Project Structure
 
-The project follows a modern `src` layout:
+The project follows a modern `src` layout with a clear separation between input data and runtime outputs:
 
 ```
 trialmesh/
@@ -179,11 +174,18 @@ trialmesh/
 │       ├── llm/           # LLM runners and processors
 │       ├── match/         # Matching logic and pipeline
 │       └── utils/         # Prompt registry and utilities
-├── data/                  # Data storage
+├── data/                  # Source data storage
+├── run/                   # Runtime outputs
+│   ├── summaries/         # LLM-generated summaries
+│   ├── summaries_embeddings/ # Vector embeddings
+│   ├── indices/           # FAISS indices
+│   ├── results/           # Search results
+│   ├── matched/           # Matching results
+│   └── evaluation/        # Evaluation metrics and visualizations
+├── cache/                 # Cache for LLM responses
 ├── docs/                  # Documentation
 │   ├── pipeline_overview.md  # Complete pipeline explanation
 │   └── prompt_design.md      # LLM prompt engineering details
-├── cache/                 # Cache for LLM responses
 ├── tests/                 # Test suite
 └── notebooks/             # Analysis notebooks
     ├── sigir_cut_to_test.ipynb    # Dataset preprocessing

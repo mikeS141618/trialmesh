@@ -47,7 +47,6 @@ dev = [
 trialmesh-download-sigir2016 = "trialmesh.fetchers.pull_sigir2016:cli_main"
 trialmesh-process-sigir2016 = "trialmesh.fetchers.processxml:cli_main"
 trialmesh-summarize = "trialmesh.llm.summarizers:cli_main"
-trialmesh-clean = "trialmesh.utils.clean_run:cli_main"
 trialmesh-codemd = "trialmesh.utils.codemd:cli_main"
 trialmesh-embed = "trialmesh.embeddings.run_embedding:cli_main"
 trialmesh-index = "trialmesh.embeddings.build_index:cli_main"

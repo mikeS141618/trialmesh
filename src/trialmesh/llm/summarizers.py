@@ -281,13 +281,13 @@ def main():
 
     # Data paths
     parser.add_argument("--data-dir", type=str, default="./data",
-                        help="Base directory containing datasets (default: ./data)")
-    parser.add_argument("--dataset", type=str, default="sigir2016/processed_cut",
-                        help="Dataset subdirectory under data-dir containing documents to summarize (default: sigir2016/processed_cut)")
+                        help="Base directory containing source datasets (default: ./data)")
+    parser.add_argument("--dataset", type=str, default="processed",
+                        help="Dataset subdirectory under data-dir containing documents to summarize (default: processed)")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="Directory for saving summaries; defaults to {data-dir}/{dataset}_summaries")
-    parser.add_argument("--cache-dir", type=str, default="./cache",
-                        help="Directory for caching LLM responses to avoid redundant computation (default: ./cache)")
+                        help="Directory for saving summaries; defaults to ./run/{dataset}_summaries")
+    parser.add_argument("--cache-dir", type=str, default="./cache/llm_responses",
+                        help="Directory for caching LLM responses to avoid redundant computation (default: ./cache/llm_responses)")
 
     # Processing options
     parser.add_argument("--skip-trials", action="store_true",
@@ -312,7 +312,7 @@ def main():
 
     # Set default output directory if not specified
     if args.output_dir is None:
-        args.output_dir = os.path.join(args.data_dir, f"{args.dataset}_summaries")
+        args.output_dir = os.path.join("./run", f"{args.dataset}_summaries")
 
     # Create summarizer
     summarizer = Summarizer(

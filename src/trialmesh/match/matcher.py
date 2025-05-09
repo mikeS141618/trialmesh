@@ -28,7 +28,6 @@ class TrialMatcher:
     trial coordinators would evaluate potential candidates.
 
     Attributes:
-        data_dir: Base data directory
         patient_summaries_path: Path to patient summaries
         trials_path: Path to trial corpus
         batch_size: Batch size for processing
@@ -41,23 +40,20 @@ class TrialMatcher:
     def __init__(
             self,
             llm: LlamaRunner,
-            data_dir: str,
-            patient_summaries_path: str,
-            trials_path: str,
+            patient_summaries_path: str,  # Now expects full path
+            trials_path: str,  # Now expects full path
             batch_size: int = 8,
     ):
         """Initialize the trial matcher.
 
         Args:
             llm: LlamaRunner instance
-            data_dir: Base data directory
-            patient_summaries_path: Path to patient summaries relative to data_dir
-            trials_path: Path to trial corpus relative to data_dir
+            patient_summaries_path: Full path to patient summaries file
+            trials_path: Full path to trial corpus file
             batch_size: Batch size for processing
         """
-        self.data_dir = data_dir
-        self.patient_summaries_path = os.path.join(data_dir, patient_summaries_path)
-        self.trials_path = os.path.join(data_dir, trials_path)
+        self.patient_summaries_path = patient_summaries_path
+        self.trials_path = trials_path
         self.batch_size = batch_size
 
         # Initialize LLM components
@@ -279,7 +275,7 @@ class TrialMatcher:
                 final_results = []
                 for trial_result in inclusion_results:
                     trial_result["scoring_result"] = {
-                        "score": "50",
+                        "score": "5",
                         "verdict": "POSSIBLE MATCH",
                         "reasoning": "Scoring skipped"
                     }

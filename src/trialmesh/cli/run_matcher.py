@@ -52,16 +52,18 @@ def parse_args():
 
     # Data paths
     parser.add_argument("--data-dir", type=str, default="./data",
-                        help="Base directory containing datasets (default: ./data)")
+                        help="Base directory containing source datasets (default: ./data)")
+    parser.add_argument("--run-dir", type=str, default="./run",
+                        help="Directory for storing pipeline outputs (default: ./run)")
     parser.add_argument("--search-results", type=str,
-                        default="sigir2016/results/bge-large-en-v1.5_hnsw_search_results.json",
-                        help="Path to search results JSON file relative to data-dir (default: sigir2016/results/bge-large-en-v1.5_hnsw_search_results.json)")
-    parser.add_argument("--patient-summaries", type=str, default="sigir2016/summaries/patient_summaries.jsonl",
-                        help="Path to patient summaries JSONL file relative to data-dir (default: sigir2016/summaries/patient_summaries.jsonl)")
-    parser.add_argument("--trials-path", type=str, default="sigir2016/processed_cut/corpus.jsonl",
-                        help="Path to trials JSONL file relative to data-dir (default: sigir2016/processed_cut/corpus.jsonl)")
-    parser.add_argument("--output-file", type=str, default="sigir2016/matched/trial_matches.json",
-                        help="Path for saving match results relative to data-dir (default: sigir2016/matched/trial_matches.json)")
+                        default="results/bge-large-en-v1.5_hnsw_search_results.json",
+                        help="Path to search results JSON file relative to run-dir (default: results/bge-large-en-v1.5_hnsw_search_results.json)")
+    parser.add_argument("--patient-summaries", type=str, default="summaries/patient_summaries.jsonl",
+                        help="Path to patient summaries JSONL file relative to run-dir (default: summaries/patient_summaries.jsonl)")
+    parser.add_argument("--trials-path", type=str, default="processed/corpus.jsonl",
+                        help="Path to trials JSONL file relative to data-dir (default: processed/corpus.jsonl)")
+    parser.add_argument("--output-file", type=str, default="matched/trial_matches.json",
+                        help="Path for saving match results relative to run-dir (default: matched/trial_matches.json)")
     parser.add_argument("--cache-dir", type=str, default="./cache/matcher",
                         help="Directory for caching LLM responses to avoid redundant computation (default: ./cache/matcher)")
 
@@ -84,7 +86,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-
 def main():
     """Main entry point for the script.
 
@@ -99,7 +100,7 @@ def main():
     setup_logging(args.log_level)
 
     # Create output directories
-    output_path = os.path.join(args.data_dir, args.output_file)
+    output_path = os.path.join(args.run_dir, args.output_file)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Initialize LLM
@@ -112,17 +113,20 @@ def main():
         max_batch_size=args.batch_size,
     )
 
-    # Initialize the matcher
+    # Construct full paths for matcher
+    patient_summaries_path = os.path.join(args.run_dir, args.patient_summaries)
+    trials_path = os.path.join(args.data_dir, args.trials_path)
+
+    # Initialize the matcher with full paths
     matcher = TrialMatcher(
         llm=llm,
-        data_dir=args.data_dir,
-        patient_summaries_path=args.patient_summaries,
-        trials_path=args.trials_path,
+        patient_summaries_path=patient_summaries_path,
+        trials_path=trials_path,
         batch_size=args.batch_size,
     )
 
-    # Load search results
-    search_results_path = os.path.join(args.data_dir, args.search_results)
+    # Load search results from run_dir
+    search_results_path = os.path.join(args.run_dir, args.search_results)
     logging.info(f"Loading search results from {search_results_path}")
     with open(search_results_path, 'r') as f:
         search_results = json.load(f)

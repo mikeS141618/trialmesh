@@ -3,7 +3,7 @@ data/
 cache/
 vllm/
 codecomplete.md
-
+run/
 
 
 # Byte-compiled / optimized / DLL files
