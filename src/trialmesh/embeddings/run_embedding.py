@@ -38,6 +38,8 @@ def parse_args():
                         help="Batch size for embedding generation; adjust based on GPU memory (default: 32)")
     parser.add_argument("--normalize", action="store_true",
                         help="L2-normalize output embeddings; recommended for cosine similarity search")
+    parser.add_argument("--local-rank", type=int, default=-1,
+                        help="Local rank for distributed training (passed by PyTorch launchers)")
 
     # GPU configuration
     parser.add_argument("--device", type=str, default=None,
@@ -98,6 +100,7 @@ def main():
         device=args.device,
         use_multi_gpu=args.multi_gpu,
         normalize_embeddings=args.normalize,
+        local_rank=args.local_rank,
     )
 
     # Generate embeddings for trials

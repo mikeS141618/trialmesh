@@ -15,7 +15,7 @@ TrialMesh addresses the challenge of matching patients to appropriate clinical t
 - **Robust Caching:** Hash-based caching system preserves prompts, tokens, and responses for reproducibility.
 - **Explainable Decisions:** All matching decisions include transparent clinical reasoning and justifications.
 - **Multiple Embedding Models:** Support for specialized biomedical embedding models including SapBERT, BioClinicalBERT, E5, BGE, and BlueBERT.
-- **Distributed Processing:** Multi-GPU support for accelerated embedding generation.
+- **Distributed Processing:** Multi-GPU support for accelerated embedding generation and LLM inference.
 - **Advanced Similarity Search:** FAISS indices for efficient retrieval with flat, IVF, and HNSW index types.
 - **Comprehensive Evaluation:** Tools for evaluating retrieval performance against gold standard data.
 
@@ -73,10 +73,19 @@ trialmesh-summarize --model-path /path/to/llama-model \
 ### Embedding Generation
 
 ```bash
-# Generate embeddings using SapBERT
+# Generate embeddings using a single GPU
 trialmesh-embed \
   --model-path /path/to/SapBERT \
   --batch-size 32 \
+  --normalize \
+  --data-dir ./run \
+  --dataset summaries
+
+# Generate embeddings using multiple GPUs (distributed processing)
+torchrun --nproc_per_node=4 \
+  $(which trialmesh-embed) --multi-gpu \
+  --model-path /path/to/bge-large-en-v1.5 \
+  --batch-size 512 \
   --normalize \
   --data-dir ./run \
   --dataset summaries
@@ -148,9 +157,9 @@ TrialMesh provides a complete pipeline for clinical trial matching. The followin
 {
   clear && rm -rv run/ &&
   trialmesh-summarize --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --dataset processed --cache-dir ./cache/llm_responses --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --condensed-trial-only --output-dir ./run/summaries &&
-  trialmesh-embed --model-path ../../models/bge-large-en-v1.5 --batch-size 256 --normalize --data-dir ./run --dataset summaries &&
+  torchrun --nproc_per_node=4 $(which trialmesh-embed) --multi-gpu --model-path ../../models/bge-large-en-v1.5 --batch-size 512 --normalize --data-dir ./run --dataset summaries &&
   trialmesh-index build --embeddings ./run/summaries_embeddings/bge-large-en-v1.5/trial_embeddings.npy --output ./run/indices/bge-large-en-v1.5_trials_flat.index --index-type flat --m 128 --ef-construction 512 &&
-  trialmesh-index search --index ./run/indices/bge-large-en-v1.5_trials_flat.index --queries ./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./run/results/bge-large-en-v1.5_flat_search_results.json --k 6 &&
+  trialmesh-index search --index ./run/indices/bge-large-en-v1.5_trials_flat.index --queries ./run/summaries_embeddings/bge-large-en-v1.5/patient_embeddings.npy --output ./run/results/bge-large-en-v1.5_flat_search_results.json --k 128 &&
   trialmesh-evaluate --data-dir ./data/sigir2016 --dataset processed &&
   trialmesh-match --model-path ../../models/Llama-3.3-70B-Instruct-FP8-dynamic --data-dir ./data/sigir2016 --tensor-parallel-size=4 --max-model-len=16384 --max-tokens=2048 --batch-size=32 --include-all-trials --search-results results/bge-large-en-v1.5_flat_search_results.json
 } |& tee trialmesh_run_$(date +%Y%m%d_%H%M%S).log
@@ -201,6 +210,7 @@ TrialMesh processes clinical trial data through several stages:
 2. **Structured Extraction:** Parse XML into structured JSON with clinical fields
 3. **LLM Summarization:** Create both detailed and condensed summaries using LLaMA
 4. **Vector Embedding:** Generate semantic embeddings for efficient retrieval
+   - Supports multi-GPU distributed processing for faster embedding generation
 5. **Index Building:** Create optimized FAISS indices for fast similarity search
 6. **Matching:** Apply multi-stage filtering from vector retrieval to detailed LLM scoring
 7. **Evaluation:** Assess retrieval performance against gold standard relevance judgments
@@ -226,6 +236,15 @@ TrialMesh supports multiple embedding models optimized for different aspects of 
 - **BlueBERT**: Model trained on PubMed abstracts and MIMIC clinical notes
 
 All models can be loaded from local disk with full multi-GPU support for distributed processing.
+
+## Distributed Processing
+
+TrialMesh offers comprehensive multi-GPU support:
+
+- **Embedding Generation**: Distributes document processing across GPUs for faster embedding generation
+- **LLM Inference**: Uses tensor parallelism via vLLM for efficient large model inference
+- **Flexible Configuration**: Adjustable tensor-parallel size and batch parameters to optimize for different hardware
+- **Performance Scaling**: Scales efficiently with the number of available GPUs for large datasets
 
 ## FAISS Index Types
 
@@ -253,6 +272,7 @@ The project has implemented:
 - Structured and condensed summaries optimized for downstream tasks
 - Robust caching and prompt management system
 - Multi-model embedding generation with GPU acceleration
+- Distributed multi-GPU processing for faster embedding generation
 - FAISS indexing and similarity search
 - Automated retrieval pipeline for multiple models
 - Performance evaluation against gold standard data
