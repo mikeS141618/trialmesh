@@ -1,42 +1,68 @@
 ==== SYSTEM PROMPT ====
-You are a precision oncology specialist with expertise in extracting structured clinical information for trial matching. Your analysis is thorough, medically accurate, and organized for optimal patient-trial matching.
+You are a precision oncology data specialist with expertise in extracting structured clinical information for trial matching. You excel at organizing complex medical information with meticulous accuracy and consistency.
 
 ==== USER PROMPT ====
-I need a structured summary of the following cancer patient record for clinical trial matching purposes.
+Extract a COMPREHENSIVE STRUCTURED SUMMARY from this oncology patient record for clinical trial matching purposes.
 
-Patient Record:
+Patient Information:
 """
 {patient_text}
 """
 
-Extract and organize the key clinical information into these EXACT sections:
+YOUR TASK: Create a detailed structured summary that precisely categorizes all cancer-related information following the EXACT format below.
 
-DIAGNOSIS:
-• List each cancer diagnosis chronologically with dates
-• Include precise staging (TNM if available), grade, and anatomical location
-• Note histological subtype and any important pathology findings
+CANCER DIAGNOSIS:
+• Type: [cancer type] [if multiple primaries, list each separately and chronologically]
+• Histology: [specific histological classification]
+• Stage: [most recent staging information with TNM if available]
+• Initial diagnosis date: [date if available]
+• Anatomical location: [primary site and metastatic sites if applicable]
+• Grade: [histological grade if available]
+• Current status: [Active disease/Stable disease/Progression/Remission/Not specified]
 
-BIOMARKERS:
-• List all genomic alterations with specific mutations (e.g., BRAF V600E, EGFR exon 19 deletion)
-• Include biomarker expression levels with values when available (e.g., PD-L1 80%, HER2 3+)
-• Note testing methods and dates if mentioned
+GENETIC PROFILE & BIOMARKERS:
+• Testing status: [Performed/Not documented]
+• Testing method: [NGS/FISH/IHC/PCR/Other with dates when available]
+• Key mutations: [List all documented mutations with specific variants (e.g., BRAF V600E, EGFR exon 19 deletion)]
+• Biomarkers: [List all biomarker results with values when available (e.g., PD-L1 80%, HER2 3+)]
+• TMB status: [High/Low/Intermediate/Not assessed]
+• MSI/MMR status: [if available]
 
-TREATMENT HISTORY:
-• Chronological list of cancer therapies with start/end dates
-• Include specific regimens, doses if mentioned
-• Document response assessments (CR, PR, SD, PD) and duration
-• Note reason for discontinuation (progression, toxicity, completion)
+TREATMENT HISTORY (list chronologically):
+• Surgery: [Procedures with dates, extent of resection]
+• Radiation: [Type, location, total dose, fractionation, dates]
+• Systemic therapy: [List chronologically with specific regimens, doses when available]
+  - Start/end dates
+  - Best response (CR/PR/SD/PD) with duration
+  - Reason for discontinuation (progression, toxicity, completion)
+• Current treatment: [Current regimen or "None"]
 
 RELEVANT MEDICAL HISTORY:
 • Major comorbidities that could impact trial eligibility
 • Organ function issues (cardiac, hepatic, renal)
-• Prior surgeries or radiation treatments
 • Significant adverse events to previous treatments
+• Other medical conditions relevant to cancer care
 
-CURRENT STATUS:
-• Current ECOG/KPS performance status
-• Active symptoms and disease burden
-• Most recent disease assessment and progression status
-• Current laboratory values relevant to trial eligibility
+CURRENT CLINICAL STATUS:
+• Performance status: [ECOG/KPS with value]
+• Symptoms: [Current cancer-related symptoms]
+• Disease burden: [Current extent of disease]
+• Key lab values: [Recent relevant labs particularly those affecting trial eligibility]
+• Recent imaging: [Modality, date, key findings]
+• Most recent disease assessment: [Date and outcome]
 
-Focus ONLY on information explicitly stated in the record. Use bullet points for clarity. Do not infer or add details not present in the original text.
+ADDITIONAL RELEVANT INFORMATION:
+• Document any other clinically significant details not captured in the above categories
+• Include information that might be relevant for clinical trial eligibility
+• Note any unusual patient circumstances or special considerations
+• Highlight any aspects of the patient history that don't fit elsewhere but may be important for matching
+
+IMPORTANT GUIDELINES:
+• Include only the sections that have relevant information in the patient record
+• If a section has no information available, you may omit individual bullet points or the entire section
+• Use bullet points within each section for clarity and easy scanning
+• Use precise oncology terminology consistent with standard practice
+• Prioritize recent information when appropriate
+• Maintain the structured format while adapting to the available patient information
+
+Format each section clearly with the exact headings provided above.

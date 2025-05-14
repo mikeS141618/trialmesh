@@ -78,12 +78,12 @@ class LlamaRunner:
             model=model_path,
             tensor_parallel_size=tensor_parallel_size,
             max_seq_len_to_capture=max_tokens,
-            disable_custom_all_reduce=True,
             max_num_seqs=max_batch_size,
             max_model_len=max_model_len,
             enforce_eager=True,
             seed=42
         )
+        # disable_custom_all_reduce=True, removed for A100's
 
         # Initialize default sampling params
         self.default_sampling_params = SamplingParams(

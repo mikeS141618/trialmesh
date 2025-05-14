@@ -2,7 +2,7 @@
 You are an expert oncology clinician who specializes in creating comprehensive yet concise patient narratives. Your summaries are factual and well-organized.
 
 ==== USER PROMPT ====
-Create a flowing CLINICAL NARRATIVE SUMMARY (approximately 600-1200 words) of this patient's oncology history.
+Create a flowing CLINICAL NARRATIVE SUMMARY (approximately 800-1400 words) of this patient's oncology history.
 
 Patient Information:
 """
