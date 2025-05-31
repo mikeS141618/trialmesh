@@ -5,12 +5,42 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple, Union
+from typing import Dict, List, Optional, Any, Set, Tuple, Union, NamedTuple
 from tqdm import tqdm
+from dataclasses import dataclass
 
 from trialmesh.llm.llama_runner import LlamaRunner
 from trialmesh.llm.prompt_runner import PromptRunner
 from trialmesh.utils.prompt_registry import PromptRegistry
+
+
+@dataclass
+class PatientTrialPair:
+    """Container for a patient-trial pair with filtering results.
+
+    This class tracks a single patient-trial combination through
+    the entire filtering pipeline, maintaining all intermediate
+    results and metadata.
+    """
+    patient_id: str
+    trial_id: str
+    patient_summary: str
+    trial_data: Dict[str, Any]
+    vector_score: float = 0.0
+    exclusion_result: Optional[Dict[str, Any]] = None
+    inclusion_result: Optional[Dict[str, Any]] = None
+    scoring_result: Optional[Dict[str, Any]] = None
+
+    def to_evaluation_dict(self) -> Dict[str, Any]:
+        """Convert to evaluation dictionary for final output."""
+        return {
+            "trial_id": self.trial_id,
+            "trial_title": self.trial_data.get("title", ""),
+            "vector_score": self.vector_score,
+            "exclusion_result": self.exclusion_result or {},
+            "inclusion_result": self.inclusion_result or {},
+            "scoring_result": self.scoring_result or {}
+        }
 
 
 class TrialMatcher:
@@ -24,8 +54,9 @@ class TrialMatcher:
     3. Inclusion criteria analysis to verify potential matches
     4. Detailed clinical reasoning and scoring for final ranking
 
-    Each stage leverages LLMs to apply clinical judgment similar to how
-    trial coordinators would evaluate potential candidates.
+    The pipeline is optimized for cross-patient batching to maximize
+    vLLM efficiency by processing massive batches across all patients
+    rather than small batches per patient.
 
     Attributes:
         patient_summaries_path (str): Path to patient summaries file
@@ -52,7 +83,7 @@ class TrialMatcher:
             llm: LlamaRunner instance
             patient_summaries_path: Full path to patient summaries file
             trials_path: Full path to trial corpus file
-            batch_size: Batch size for processing
+            batch_size: Batch size for processing (used for massive cross-patient batches)
             prompt_dir: Directory containing prompt text files
         """
         self.patient_summaries_path = patient_summaries_path
@@ -137,6 +168,64 @@ class TrialMatcher:
 
         return formatted_text.strip()
 
+    def _collect_all_patient_trial_pairs(self, search_results: List[Dict[str, Any]],
+                                         top_k: Optional[int] = None) -> List[PatientTrialPair]:
+        """Collect all patient-trial pairs from search results.
+
+        This method creates PatientTrialPair objects for every combination
+        of patients and their candidate trials, setting up the data structure
+        for cross-patient batch processing.
+
+        Args:
+            search_results: List of search result dictionaries from vector retrieval
+            top_k: Maximum number of trials to evaluate per patient
+
+        Returns:
+            List of PatientTrialPair objects ready for batch processing
+        """
+        logging.info("Collecting all patient-trial pairs for batch processing")
+
+        all_pairs = []
+        total_pairs = 0
+
+        for patient_result in search_results:
+            patient_id = patient_result["query_id"]
+            patient_data = self.patients.get(patient_id)
+
+            if not patient_data:
+                logging.warning(f"Patient {patient_id} not found in summaries, skipping")
+                continue
+
+            patient_summary = patient_data.get("summary", "")
+
+            # Get trial results for this patient
+            if top_k is not None:
+                trial_results = patient_result.get("results", [])[:top_k]
+            else:
+                trial_results = patient_result.get("results", [])
+
+            # Create pairs for valid trials
+            for trial_result in trial_results:
+                trial_id = trial_result["doc_id"]
+                vector_score = trial_result.get("score", 0.0)
+                trial_data = self.trials.get(trial_id)
+
+                if trial_data:
+                    pair = PatientTrialPair(
+                        patient_id=patient_id,
+                        trial_id=trial_id,
+                        patient_summary=patient_summary,
+                        trial_data=trial_data,
+                        vector_score=vector_score
+                    )
+                    all_pairs.append(pair)
+                    total_pairs += 1
+                else:
+                    logging.warning(f"Trial {trial_id} not found in corpus, skipping")
+
+        logging.info(f"Collected {total_pairs} patient-trial pairs for processing")
+        return all_pairs
+
     def match(self, search_results: List[Dict[str, Any]],
               exclusion_prompt: str = "exclusion_filter_sigir2016",
               inclusion_prompt: str = "inclusion_filter_sigir2016",
@@ -152,11 +241,12 @@ class TrialMatcher:
               skip_inclusion: bool = False,
               skip_scoring: bool = False,
               include_all_trials: bool = False) -> List[Dict[str, Any]]:
-        """Run the complete matching pipeline.
+        """Run the complete matching pipeline with cross-patient batching.
 
-        This method processes the search results through the multi-stage
-        filtering pipeline to generate detailed trial matching assessments
-        for each patient.
+        This method processes all patient-trial pairs through massive
+        cross-patient batches to maximize vLLM efficiency. Instead of
+        processing patients sequentially, it processes all pairs globally
+        in three massive batches.
 
         Args:
             search_results: List of search result dictionaries from vector retrieval
@@ -178,248 +268,141 @@ class TrialMatcher:
         Returns:
             List of patient match results with detailed trial evaluations
         """
-        logging.info("Starting trial matching process")
+        logging.info("Starting cross-patient batch trial matching process")
         logging.info(f"Using exclusion prompt: {exclusion_prompt}")
         logging.info(f"Using inclusion prompt: {inclusion_prompt}")
         logging.info(f"Using scoring prompt: {scoring_prompt}")
 
-        # Process patients in order
-        all_patient_results = []
+        # Step 1: Collect all patient-trial pairs
+        all_pairs = self._collect_all_patient_trial_pairs(search_results, top_k)
 
-        for patient_result in tqdm(search_results, desc="Processing patients"):
-            patient_id = patient_result["query_id"]
-            patient_data = self.patients.get(patient_id)
+        if not all_pairs:
+            logging.warning("No valid patient-trial pairs found")
+            return []
 
-            if not patient_data:
-                logging.warning(f"Patient {patient_id} not found in summaries, skipping")
-                continue
+        # Step 2: Apply exclusion filter globally
+        if not skip_exclusion:
+            all_pairs = self._apply_exclusion_filter_global(
+                all_pairs,
+                prompt_name=exclusion_prompt,
+                max_tokens=exclusion_max_tokens,
+                temperature=exclusion_temperature
+            )
+        else:
+            # Mark all as passed if skipping exclusion
+            for pair in all_pairs:
+                pair.exclusion_result = {"verdict": "PASS", "reason": "Exclusion filter skipped"}
 
-            patient_summary = patient_data.get("summary", "")
-
-            # Get trial results for this patient
-            if top_k is not None:
-                trial_results = patient_result.get("results", [])[:top_k]
-                logging.info(f"Using top {top_k} trials for patient {patient_id}")
-            else:
-                trial_results = patient_result.get("results", [])
-                logging.info(f"Using all {len(trial_results)} trials for patient {patient_id}")
-
-            trial_ids = [tr["doc_id"] for tr in trial_results]
-
-            # Prepare patient result structure
-            patient_match_result = {
-                "patient_id": patient_id,
-                "patient_summary": patient_summary,
-                "trial_evaluations": []
-            }
-
-            # Get trial data
-            valid_trials = []
-            for trial_id in trial_ids:
-                trial_data = self.trials.get(trial_id)
-                if trial_data:
-                    valid_trials.append((trial_id, trial_data))
-                else:
-                    logging.warning(f"Trial {trial_id} not found in corpus, skipping")
-
-            # Dictionary to track all trials for complete results option
-            all_trial_results = {}
-
-            # 1. Exclusion Filter
-            if not skip_exclusion:
-                filtered_trials, excluded_trials = self._apply_exclusion_filter(
-                    patient_summary,
-                    valid_trials,
-                    prompt_name=exclusion_prompt,
-                    max_tokens=exclusion_max_tokens,
-                    temperature=exclusion_temperature,
-                    return_excluded=include_all_trials
-                )
-
-                # Track all trials if needed
-                if include_all_trials:
-                    for trial_result in filtered_trials + excluded_trials:
-                        all_trial_results[trial_result["trial_id"]] = trial_result
-            else:
-                # Skip exclusion filter - pass all trials through with PASS verdict
-                filtered_trials = []
-                for trial_id, trial_data in valid_trials:
-                    trial_result = {
-                        "trial_id": trial_id,
-                        "trial_data": trial_data,
-                        "exclusion_result": {"verdict": "PASS", "reason": "Exclusion filter skipped"}
-                    }
-                    filtered_trials.append(trial_result)
-                    if include_all_trials:
-                        all_trial_results[trial_id] = trial_result
-
-            # 2. Inclusion Filter (for trials that passed exclusion)
-            if not skip_inclusion:
-                inclusion_results, failed_inclusion = self._apply_inclusion_filter(
-                    patient_summary,
-                    filtered_trials,
-                    prompt_name=inclusion_prompt,
-                    max_tokens=inclusion_max_tokens,
-                    temperature=inclusion_temperature,
-                    return_failed=include_all_trials
-                )
-
-                # Track inclusion failures if needed
-                if include_all_trials:
-                    for trial_result in failed_inclusion:
-                        all_trial_results[trial_result["trial_id"]] = trial_result
-            else:
-                # Skip inclusion filter - pass all trials through with UNDETERMINED verdict
-                inclusion_results = []
-                for trial_result in filtered_trials:
-                    trial_result["inclusion_result"] = {
+        # Step 3: Apply inclusion filter globally (only to pairs that passed exclusion)
+        if not skip_inclusion:
+            all_pairs = self._apply_inclusion_filter_global(
+                all_pairs,
+                prompt_name=inclusion_prompt,
+                max_tokens=inclusion_max_tokens,
+                temperature=inclusion_temperature,
+                include_all_trials=include_all_trials
+            )
+        else:
+            # Mark all as undetermined if skipping inclusion
+            for pair in all_pairs:
+                if pair.exclusion_result and pair.exclusion_result.get("verdict") != "EXCLUDE":
+                    pair.inclusion_result = {
                         "verdict": "UNDETERMINED",
                         "missing_information": "None",
                         "unmet_criteria": "None",
                         "reasoning": "Inclusion filter skipped"
                     }
-                    inclusion_results.append(trial_result)
-                    if include_all_trials:
-                        all_trial_results[trial_result["trial_id"]] = trial_result
 
-            # 3. Final Scoring (for trials that didn't fail inclusion)
-            if not skip_scoring:
-                final_results = self._apply_scoring(
-                    patient_summary,
-                    inclusion_results,
-                    prompt_name=scoring_prompt,
-                    max_tokens=scoring_max_tokens,
-                    temperature=scoring_temperature
-                )
-
-                # Update tracked results with scores
-                if include_all_trials:
-                    for trial_result in final_results:
-                        all_trial_results[trial_result["trial_id"]] = trial_result
-            else:
-                # Skip scoring - keep all trials with default score
-                final_results = []
-                for trial_result in inclusion_results:
-                    trial_result["scoring_result"] = {
+        # Step 4: Apply scoring globally (only to pairs that didn't fail inclusion)
+        if not skip_scoring:
+            all_pairs = self._apply_scoring_global(
+                all_pairs,
+                prompt_name=scoring_prompt,
+                max_tokens=scoring_max_tokens,
+                temperature=scoring_temperature,
+                include_all_trials=include_all_trials
+            )
+        else:
+            # Mark all with default score if skipping scoring
+            for pair in all_pairs:
+                if (pair.exclusion_result and pair.exclusion_result.get("verdict") != "EXCLUDE" and
+                        pair.inclusion_result and pair.inclusion_result.get("verdict") != "FAIL"):
+                    pair.scoring_result = {
                         "score": "5",
                         "verdict": "POSSIBLE MATCH",
                         "reasoning": "Scoring skipped"
                     }
-                    final_results.append(trial_result)
-                    if include_all_trials:
-                        all_trial_results[trial_result["trial_id"]] = trial_result
 
-            # Add trial evaluations to patient result
-            if include_all_trials:
-                # Include all trials we've tracked
-                for trial_id, trial_result in all_trial_results.items():
-                    trial_data = trial_result["trial_data"]
+        # Step 5: Reconstruct patient-centric results
+        patient_results = self._reconstruct_patient_results(all_pairs, include_all_trials)
 
-                    evaluation = {
-                        "trial_id": trial_id,
-                        "trial_title": trial_data.get("title", ""),
-                        "exclusion_result": trial_result.get("exclusion_result", {}),
-                        "inclusion_result": trial_result.get("inclusion_result", {}),
-                        "scoring_result": trial_result.get("scoring_result", {})
-                    }
+        logging.info(f"Completed matching for {len(patient_results)} patients")
+        return patient_results
 
-                    patient_match_result["trial_evaluations"].append(evaluation)
-            else:
-                # Include only trials that made it through all filters
-                for trial_result in final_results:
-                    trial_id = trial_result["trial_id"]
-                    trial_data = trial_result["trial_data"]
+    def _apply_exclusion_filter_global(self, all_pairs: List[PatientTrialPair],
+                                       prompt_name: str = "exclusion_filter_sigir2016",
+                                       max_tokens: Optional[int] = None,
+                                       temperature: Optional[float] = None) -> List[PatientTrialPair]:
+        """Apply exclusion filter globally across all patient-trial pairs.
 
-                    evaluation = {
-                        "trial_id": trial_id,
-                        "trial_title": trial_data.get("title", ""),
-                        "exclusion_result": trial_result.get("exclusion_result", {}),
-                        "inclusion_result": trial_result.get("inclusion_result", {}),
-                        "scoring_result": trial_result.get("scoring_result", {})
-                    }
-
-                    patient_match_result["trial_evaluations"].append(evaluation)
-
-            # Add patient result to all results
-            all_patient_results.append(patient_match_result)
-
-        logging.info(f"Completed matching for {len(all_patient_results)} patients")
-        return all_patient_results
-
-    def _apply_exclusion_filter(self, patient_summary: str, trials: List[Tuple[str, Dict[str, Any]]],
-                                prompt_name: str = "exclusion_filter_sigir2016",
-                                max_tokens: Optional[int] = None,
-                                temperature: Optional[float] = None,
-                                return_excluded: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Apply exclusion filter to trials.
-
-        This method evaluates whether a patient should be excluded from trials
-        based on exclusion criteria. It uses an LLM to analyze the patient summary
-        against each trial's exclusion criteria to identify clear mismatches.
-
-        The method automatically passes trials without exclusion criteria and
-        processes the remaining trials in batches for efficiency.
+        This method processes all patient-trial pairs in massive batches,
+        maximizing vLLM efficiency by batching across patients rather than
+        within patients.
 
         Args:
-            patient_summary: Patient summary text
-            trials: List of (trial_id, trial_data) tuples
+            all_pairs: List of all PatientTrialPair objects
             prompt_name: Name of the prompt to use for exclusion filtering
             max_tokens: Maximum tokens to generate in response
             temperature: Temperature for generation
-            return_excluded: Whether to return excluded trials
 
         Returns:
-            Tuple of (passed_trials, excluded_trials), where excluded_trials
-            is empty if return_excluded is False
+            List of PatientTrialPair objects with exclusion results filled in
         """
-        logging.info(f"Running exclusion filter on {len(trials)} trials with prompt {prompt_name}")
+        logging.info(f"Running global exclusion filter on {len(all_pairs)} pairs with prompt {prompt_name}")
 
         # Check if prompt exists
         if not self.prompt_registry.get(prompt_name).get("user"):
             logging.error(f"Exclusion prompt {prompt_name} not found")
             raise ValueError(f"Exclusion prompt {prompt_name} not found in registry")
 
-        # Pre-filter trials with empty exclusion criteria
-        trials_with_criteria = []
-        auto_passed_trials = []
+        # Pre-filter pairs with empty exclusion criteria
+        pairs_with_criteria = []
+        auto_passed_pairs = []
 
-        for trial_id, trial_data in trials:
-            exclusion_criteria = trial_data.get("metadata", {}).get("exclusion_criteria", "")
+        for pair in all_pairs:
+            exclusion_criteria = pair.trial_data.get("metadata", {}).get("exclusion_criteria", "")
             if not exclusion_criteria.strip():
                 # Auto-pass trials with no exclusion criteria
-                trial_result = {
-                    "trial_id": trial_id,
-                    "trial_data": trial_data,
-                    "exclusion_result": {"verdict": "PASS", "reason": "No exclusion criteria specified"}
-                }
-                auto_passed_trials.append(trial_result)
+                pair.exclusion_result = {"verdict": "PASS", "reason": "No exclusion criteria specified"}
+                auto_passed_pairs.append(pair)
             else:
-                trials_with_criteria.append((trial_id, trial_data))
+                pairs_with_criteria.append(pair)
 
-        logging.info(f"Auto-passed {len(auto_passed_trials)} trials with no exclusion criteria")
+        logging.info(f"Auto-passed {len(auto_passed_pairs)} pairs with no exclusion criteria")
 
-        # If no trials have exclusion criteria, return early
-        if not trials_with_criteria:
-            # Always return a tuple, with empty list as second value if not return_excluded
-            return auto_passed_trials, []
+        # If no pairs have exclusion criteria, return early
+        if not pairs_with_criteria:
+            return all_pairs
 
-        # Prepare batches for trials that have exclusion criteria
-        batches = [trials_with_criteria[i:i + self.batch_size]
-                   for i in range(0, len(trials_with_criteria), self.batch_size)]
+        # Prepare massive batches for cross-patient processing
+        # Use larger batch sizes since we're batching across patients
+        batch_size = self.batch_size
+        batches = [pairs_with_criteria[i:i + batch_size]
+                   for i in range(0, len(pairs_with_criteria), batch_size)]
+
+        logging.info(
+            f"Processing {len(pairs_with_criteria)} pairs in {len(batches)} batches of size ~{batch_size}")
 
         # Process each batch
-        passed_trials = auto_passed_trials  # Start with auto-passed trials
-        excluded_trials = []
-
-        for batch in tqdm(batches, desc="Exclusion filtering"):
+        for batch_idx, batch in enumerate(tqdm(batches, desc="Global exclusion filtering")):
             variables_list = []
 
-            for trial_id, trial_data in batch:
+            for pair in batch:
                 # Extract exclusion criteria
-                exclusion_criteria = trial_data.get("metadata", {}).get("exclusion_criteria", "")
+                exclusion_criteria = pair.trial_data.get("metadata", {}).get("exclusion_criteria", "")
 
                 variables = {
-                    "patient_summary": patient_summary,
+                    "patient_summary": pair.patient_summary,
                     "exclusion_criteria": exclusion_criteria
                 }
 
@@ -434,9 +417,10 @@ class TrialMatcher:
             )
 
             # Process responses
-            for i, ((trial_id, trial_data), response) in enumerate(zip(batch, responses)):
+            for pair, response in zip(batch, responses):
                 if response is None:
-                    logging.warning(f"No response for trial {trial_id}, skipping")
+                    logging.warning(f"No response for pair {pair.patient_id}-{pair.trial_id}, marking as PASS")
+                    pair.exclusion_result = {"verdict": "PASS", "reason": "No LLM response received"}
                     continue
 
                 # Extract verdict and reason using regex
@@ -448,107 +432,104 @@ class TrialMatcher:
 
                 # Log unparsable responses for review
                 if verdict == "UNPARSABLE_VERDICT":
-                    logging.warning(f"Could not parse verdict for trial {trial_id} in exclusion filter")
+                    logging.warning(
+                        f"Could not parse verdict for pair {pair.patient_id}-{pair.trial_id} in exclusion filter")
                     logging.debug(f"Response fragment: {response.text[:200]}...")
+                    # Treat unparsable as PASS to be conservative
+                    verdict = "PASS"
+                    reason = f"Unparsable response (treated as PASS): {reason}"
 
-                # Create trial result with exclusion data
-                trial_result = {
-                    "trial_id": trial_id,
-                    "trial_data": trial_data,
-                    "exclusion_result": {"verdict": verdict, "reason": reason}
-                }
+                # Store exclusion result
+                pair.exclusion_result = {"verdict": verdict, "reason": reason}
 
-                # If verdict is not EXCLUDE, add trial to passed list
-                if verdict != "EXCLUDE":
-                    passed_trials.append(trial_result)
-                elif return_excluded:
-                    excluded_trials.append(trial_result)
+        # Count results
+        excluded_count = sum(1 for pair in all_pairs
+                             if pair.exclusion_result and pair.exclusion_result.get("verdict") == "EXCLUDE")
+        passed_count = len(all_pairs) - excluded_count
 
-        logging.info(f"Exclusion filter passed {len(passed_trials)} of {len(trials)} trials")
+        logging.info(
+            f"Global exclusion filter: {passed_count} passed, {excluded_count} excluded of {len(all_pairs)} total pairs")
 
-        # Always return a tuple with both values
-        return passed_trials, excluded_trials
+        return all_pairs
 
-    def _apply_inclusion_filter(self, patient_summary: str, trials: List[Dict[str, Any]],
-                                prompt_name: str = "inclusion_filter_sigir2016",
-                                max_tokens: Optional[int] = None,
-                                temperature: Optional[float] = None,
-                                return_failed: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Apply inclusion filter to trials that passed exclusion.
+    def _apply_inclusion_filter_global(self, all_pairs: List[PatientTrialPair],
+                                       prompt_name: str = "inclusion_filter_sigir2016",
+                                       max_tokens: Optional[int] = None,
+                                       temperature: Optional[float] = None,
+                                       include_all_trials: bool = False) -> List[PatientTrialPair]:
+        """Apply inclusion filter globally to pairs that passed exclusion.
 
-        This method evaluates whether a patient meets the inclusion criteria
-        for each trial. It uses an LLM to analyze the patient summary against
-        each trial's inclusion criteria to determine eligibility.
-
-        The method identifies missing information and unmet criteria,
-        providing detailed reasoning for each decision.
+        This method evaluates whether patients meet inclusion criteria
+        for trials in massive cross-patient batches.
 
         Args:
-            patient_summary: Patient summary text
-            trials: List of dictionaries with trial data and exclusion results
+            all_pairs: List of all PatientTrialPair objects
             prompt_name: Name of the prompt to use for inclusion filtering
             max_tokens: Maximum tokens to generate in response
             temperature: Temperature for generation
-            return_failed: Whether to return trials that failed inclusion
+            include_all_trials: Whether to process all trials or only those that passed exclusion
 
         Returns:
-            Tuple of (included_trials, failed_trials), where failed_trials
-            is empty if return_failed is False
+            List of PatientTrialPair objects with inclusion results filled in
         """
-        logging.info(f"Running inclusion filter on {len(trials)} trials with prompt {prompt_name}")
+        # Filter to only pairs that passed exclusion (unless including all)
+        if include_all_trials:
+            eligible_pairs = [pair for pair in all_pairs if pair.exclusion_result]
+        else:
+            eligible_pairs = [pair for pair in all_pairs
+                              if pair.exclusion_result and pair.exclusion_result.get("verdict") != "EXCLUDE"]
+
+        logging.info(
+            f"Running global inclusion filter on {len(eligible_pairs)} eligible pairs with prompt {prompt_name}")
 
         # Check if prompt exists
         if not self.prompt_registry.get(prompt_name).get("user"):
             logging.error(f"Inclusion prompt {prompt_name} not found")
             raise ValueError(f"Inclusion prompt {prompt_name} not found in registry")
 
-        # Pre-filter trials with empty inclusion criteria
-        trials_with_criteria = []
-        auto_undetermined_trials = []
+        # Pre-filter pairs with empty inclusion criteria
+        pairs_with_criteria = []
+        auto_undetermined_pairs = []
 
-        for trial_result in trials:
-            trial_data = trial_result["trial_data"]
-            inclusion_criteria = trial_data.get("metadata", {}).get("inclusion_criteria", "")
+        for pair in eligible_pairs:
+            inclusion_criteria = pair.trial_data.get("metadata", {}).get("inclusion_criteria", "")
 
             if not inclusion_criteria.strip():
                 # Auto-mark trials with no inclusion criteria as UNDETERMINED
-                trial_result["inclusion_result"] = {
+                pair.inclusion_result = {
                     "verdict": "UNDETERMINED",
                     "missing_information": "N/A",
                     "unmet_criteria": "N/A",
                     "reasoning": "No inclusion criteria specified"
                 }
-                auto_undetermined_trials.append(trial_result)
+                auto_undetermined_pairs.append(pair)
             else:
-                trials_with_criteria.append(trial_result)
+                pairs_with_criteria.append(pair)
 
-        logging.info(f"Auto-undetermined {len(auto_undetermined_trials)} trials with no inclusion criteria")
+        logging.info(f"Auto-undetermined {len(auto_undetermined_pairs)} pairs with no inclusion criteria")
 
-        # If no trials have inclusion criteria, return early
-        if not trials_with_criteria:
-            if return_failed:
-                return auto_undetermined_trials, []
-            return auto_undetermined_trials
+        # If no pairs have inclusion criteria, return early
+        if not pairs_with_criteria:
+            return all_pairs
 
-        # Prepare batches for trials that have inclusion criteria
-        batches = [trials_with_criteria[i:i + self.batch_size]
-                   for i in range(0, len(trials_with_criteria), self.batch_size)]
+        # Prepare massive batches for cross-patient processing
+        batch_size = self.batch_size
+        batches = [pairs_with_criteria[i:i + batch_size]
+                   for i in range(0, len(pairs_with_criteria), batch_size)]
+
+        logging.info(
+            f"Processing {len(pairs_with_criteria)} pairs in {len(batches)} batches of size ~{batch_size}")
 
         # Process each batch
-        included_trials = auto_undetermined_trials  # Start with auto-undetermined trials
-        failed_trials = []
-
-        for batch in tqdm(batches, desc="Inclusion filtering"):
+        for batch_idx, batch in enumerate(tqdm(batches, desc="Global inclusion filtering")):
             variables_list = []
 
-            for trial_result in batch:
-                trial_data = trial_result["trial_data"]
-
+            for pair in batch:
                 # Extract inclusion criteria
-                inclusion_criteria = trial_data.get("metadata", {}).get("inclusion_criteria", "")
+                inclusion_criteria = pair.trial_data.get("metadata", {}).get("inclusion_criteria", "")
 
                 variables = {
-                    "patient_summary": patient_summary,
+                    "patient_summary": pair.patient_summary,
                     "inclusion_criteria": inclusion_criteria
                 }
 
@@ -563,9 +544,15 @@ class TrialMatcher:
             )
 
             # Process responses
-            for i, (trial_result, response) in enumerate(zip(batch, responses)):
+            for pair, response in zip(batch, responses):
                 if response is None:
-                    logging.warning(f"No response for trial {trial_result['trial_id']}, skipping")
+                    logging.warning(f"No response for pair {pair.patient_id}-{pair.trial_id}, marking as UNDETERMINED")
+                    pair.inclusion_result = {
+                        "verdict": "UNDETERMINED",
+                        "missing_information": "No LLM response received",
+                        "unmet_criteria": "Unknown",
+                        "reasoning": "No LLM response received"
+                    }
                     continue
 
                 # Extract information using improved regex
@@ -583,79 +570,90 @@ class TrialMatcher:
 
                 # Handle unparsable verdicts
                 if verdict == "UNPARSABLE_VERDICT":
-                    logging.warning(f"Could not parse verdict for trial {trial_result['trial_id']} in inclusion filter")
+                    logging.warning(
+                        f"Could not parse verdict for pair {pair.patient_id}-{pair.trial_id} in inclusion filter")
                     logging.debug(f"Response fragment: {response.text[:200]}...")
+                    # Treat unparsable as UNDETERMINED to be conservative
+                    verdict = "UNDETERMINED"
+                    reasoning = f"Unparsable response (treated as UNDETERMINED): {reasoning}"
 
-                # Add inclusion result to trial data
-                trial_result["inclusion_result"] = {
+                # Store inclusion result
+                pair.inclusion_result = {
                     "verdict": verdict,
                     "missing_information": missing,
                     "unmet_criteria": unmet,
                     "reasoning": reasoning
                 }
 
-                # Add to appropriate list based on verdict
-                if verdict != "FAIL":
-                    included_trials.append(trial_result)
-                elif return_failed:
-                    failed_trials.append(trial_result)
+        # Count results
+        failed_count = sum(1 for pair in eligible_pairs
+                           if pair.inclusion_result and pair.inclusion_result.get("verdict") == "FAIL")
+        passed_count = len(eligible_pairs) - failed_count
 
-        logging.info(f"Inclusion filter kept {len(included_trials)} of {len(trials)} trials")
+        logging.info(
+            f"Global inclusion filter: {passed_count} passed/undetermined, {failed_count} failed of {len(eligible_pairs)} eligible pairs")
 
-        if return_failed:
-            return included_trials, failed_trials
-        return included_trials, []  # Return empty list as second value
+        return all_pairs
 
-    def _apply_scoring(self, patient_summary: str, trials: List[Dict[str, Any]],
-                       max_tokens: Optional[int] = None,
-                       temperature: Optional[float] = None,
-                       prompt_name: str = "final_match_scoring_sigir2016") -> List[Dict[str, Any]]:
-        """Apply final scoring to trials that passed inclusion filter.
+    def _apply_scoring_global(self, all_pairs: List[PatientTrialPair],
+                              prompt_name: str = "final_match_scoring_sigir2016",
+                              max_tokens: Optional[int] = None,
+                              temperature: Optional[float] = None,
+                              include_all_trials: bool = False) -> List[PatientTrialPair]:
+        """Apply final scoring globally to pairs that passed both filters.
 
-        This method performs detailed clinical evaluation of each trial
-        for the given patient, considering:
-        1. Results from previous filtering stages
-        2. Detailed trial information
-        3. Patient characteristics
-
-        It assigns a score (typically 1-10) and detailed verdict with
-        clinical reasoning explaining the match quality.
+        This method performs detailed clinical evaluation in massive
+        cross-patient batches for maximum efficiency.
 
         Args:
-            patient_summary: Patient summary text
-            trials: List of dictionaries with trial data and previous filter results
+            all_pairs: List of all PatientTrialPair objects
+            prompt_name: Name of the prompt to use for final scoring
             max_tokens: Maximum tokens to generate in response
             temperature: Temperature for generation
-            prompt_name: Name of the prompt to use for final scoring
+            include_all_trials: Whether to process all trials or only those that passed filters
 
         Returns:
-            List of trial dictionaries with added scoring results
+            List of PatientTrialPair objects with scoring results filled in
         """
-        logging.info(f"Running final scoring on {len(trials)} trials with prompt {prompt_name}")
+        # Filter to only pairs that should be scored
+        if include_all_trials:
+            eligible_pairs = [pair for pair in all_pairs
+                              if (pair.exclusion_result and pair.inclusion_result)]
+        else:
+            eligible_pairs = [pair for pair in all_pairs
+                              if (pair.exclusion_result and pair.exclusion_result.get("verdict") != "EXCLUDE" and
+                                  pair.inclusion_result and pair.inclusion_result.get("verdict") != "FAIL")]
+
+        logging.info(f"Running global scoring on {len(eligible_pairs)} eligible pairs with prompt {prompt_name}")
 
         # Check if prompt exists
         if not self.prompt_registry.get(prompt_name).get("user"):
             logging.error(f"Scoring prompt {prompt_name} not found")
             raise ValueError(f"Scoring prompt {prompt_name} not found in registry")
 
-        # Prepare batches for processing
-        batches = [trials[i:i + self.batch_size] for i in range(0, len(trials), self.batch_size)]
+        if not eligible_pairs:
+            logging.info("No eligible pairs for scoring")
+            return all_pairs
+
+        # Prepare massive batches for cross-patient processing
+        batch_size = self.batch_size
+        batches = [eligible_pairs[i:i + batch_size]
+                   for i in range(0, len(eligible_pairs), batch_size)]
+
+        logging.info(
+            f"Processing {len(eligible_pairs)} pairs in {len(batches)} batches of size ~{batch_size}")
 
         # Process each batch
-        scored_trials = []
-
-        for batch in tqdm(batches, desc="Final scoring"):
+        for batch_idx, batch in enumerate(tqdm(batches, desc="Global scoring")):
             variables_list = []
 
-            for trial_result in batch:
-                trial_data = trial_result["trial_data"]
-
+            for pair in batch:
                 # Format trial text
-                trial_summary = self._format_trial(trial_data)
+                trial_summary = self._format_trial(pair.trial_data)
 
                 # Extract previous filter results
-                exclusion_result = trial_result.get("exclusion_result", {})
-                inclusion_result = trial_result.get("inclusion_result", {})
+                exclusion_result = pair.exclusion_result or {}
+                inclusion_result = pair.inclusion_result or {}
 
                 exclusion_verdict = exclusion_result.get("verdict", "UNKNOWN")
                 exclusion_reason = exclusion_result.get("reason", "No reason provided")
@@ -666,7 +664,7 @@ class TrialMatcher:
                 unmet_criteria = inclusion_result.get("unmet_criteria", "None")
 
                 variables = {
-                    "patient_summary": patient_summary,
+                    "patient_summary": pair.patient_summary,
                     "trial_summary": trial_summary,
                     "exclusion_verdict": exclusion_verdict,
                     "exclusion_reason": exclusion_reason,
@@ -687,9 +685,14 @@ class TrialMatcher:
             )
 
             # Process responses
-            for i, (trial_result, response) in enumerate(zip(batch, responses)):
+            for pair, response in zip(batch, responses):
                 if response is None:
-                    logging.warning(f"No response for trial {trial_result['trial_id']}, skipping")
+                    logging.warning(f"No response for pair {pair.patient_id}-{pair.trial_id}, assigning default score")
+                    pair.scoring_result = {
+                        "score": "5",
+                        "verdict": "POSSIBLE MATCH",
+                        "reasoning": "No LLM response received, assigned default score"
+                    }
                     continue
 
                 # Extract information using improved regex with better section boundaries
@@ -704,20 +707,103 @@ class TrialMatcher:
 
                 # Handle unparsable scores/verdicts
                 if score == "UNPARSABLE_SCORE":
-                    logging.warning(f"Trial {trial_result['trial_id']} had unparsable score")
+                    logging.warning(f"Pair {pair.patient_id}-{pair.trial_id} had unparsable score, assigning default")
+                    score = "5"  # Default middle score
+                    reasoning = f"Unparsable score (assigned default 5): {reasoning}"
 
                 if verdict == "UNPARSABLE_VERDICT":
-                    reasoning += " (Original verdict was unparsable)"
-                    logging.warning(f"Trial {trial_result['trial_id']} had unparsable verdict")
+                    logging.warning(f"Pair {pair.patient_id}-{pair.trial_id} had unparsable verdict")
+                    verdict = "POSSIBLE MATCH"
+                    reasoning = f"Unparsable verdict (treated as POSSIBLE MATCH): {reasoning}"
 
-                # Add scoring result to trial data
-                trial_result["scoring_result"] = {
+                # Store scoring result
+                pair.scoring_result = {
                     "score": score,
                     "verdict": verdict,
                     "reasoning": reasoning
                 }
 
-                scored_trials.append(trial_result)
+        scored_count = sum(1 for pair in eligible_pairs if pair.scoring_result)
+        logging.info(f"Global scoring completed for {scored_count} of {len(eligible_pairs)} eligible pairs")
 
-        logging.info(f"Completed scoring for {len(scored_trials)} trials")
-        return scored_trials
+        return all_pairs
+
+    def _reconstruct_patient_results(self, all_pairs: List[PatientTrialPair],
+                                     include_all_trials: bool = False) -> List[Dict[str, Any]]:
+        """Reconstruct patient-centric results from processed pairs.
+
+        This method groups the processed PatientTrialPair objects back
+        into the expected patient-centric output format.
+
+        Args:
+            all_pairs: List of processed PatientTrialPair objects
+            include_all_trials: Whether to include all trials regardless of filtering status
+
+        Returns:
+            List of patient match results in the expected format
+        """
+        logging.info("Reconstructing patient-centric results from processed pairs")
+
+        # Group pairs by patient
+        patient_pairs = {}
+        for pair in all_pairs:
+            if pair.patient_id not in patient_pairs:
+                patient_pairs[pair.patient_id] = []
+            patient_pairs[pair.patient_id].append(pair)
+
+        # Build patient results
+        patient_results = []
+
+        for patient_id, pairs in patient_pairs.items():
+            if not pairs:
+                continue
+
+            # Get patient summary from the first pair
+            patient_summary = pairs[0].patient_summary
+
+            # Prepare patient result structure
+            patient_match_result = {
+                "patient_id": patient_id,
+                "patient_summary": patient_summary,
+                "trial_evaluations": []
+            }
+
+            # Filter pairs based on include_all_trials setting
+            if include_all_trials:
+                # Include all trials that have been processed
+                relevant_pairs = [pair for pair in pairs
+                                  if pair.exclusion_result is not None]
+            else:
+                # Include only trials that made it through all filters
+                relevant_pairs = [pair for pair in pairs
+                                  if (pair.exclusion_result and pair.exclusion_result.get("verdict") != "EXCLUDE" and
+                                      pair.inclusion_result and pair.inclusion_result.get("verdict") != "FAIL" and
+                                      pair.scoring_result is not None)]
+
+            # Convert pairs to evaluation dictionaries
+            for pair in relevant_pairs:
+                evaluation = pair.to_evaluation_dict()
+                patient_match_result["trial_evaluations"].append(evaluation)
+
+            # Sort by score if available, otherwise by vector score
+            def sort_key(eval_dict):
+                score_result = eval_dict.get("scoring_result", {})
+                if score_result and score_result.get("score", "").isdigit():
+                    return -int(score_result["score"])  # Negative for descending
+                return -eval_dict.get("vector_score", 0.0)  # Fallback to vector score
+
+            patient_match_result["trial_evaluations"].sort(key=sort_key)
+
+            patient_results.append(patient_match_result)
+
+        # Sort patient results by patient_id for consistency
+        patient_results.sort(key=lambda x: x["patient_id"])
+
+        # Log summary statistics
+        total_evaluations = sum(len(pr["trial_evaluations"]) for pr in patient_results)
+        avg_evaluations = total_evaluations / len(patient_results) if patient_results else 0
+
+        logging.info(f"Reconstructed results for {len(patient_results)} patients")
+        logging.info(f"Total trial evaluations: {total_evaluations} (avg: {avg_evaluations:.1f} per patient)")
+
+        return patient_results
