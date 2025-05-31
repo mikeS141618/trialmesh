@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trialmesh"
-version = "1.0.0"
+version = "1.1.0"
 description = "A modular clinical trial matching system using LLMs and vector search"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
